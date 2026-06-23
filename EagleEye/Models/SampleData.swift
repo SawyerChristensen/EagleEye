@@ -1,0 +1,166 @@
+//
+//  SampleData.swift
+//  EagleEye
+//
+//  Placeholder data so the UI has something to show before a real
+//  Congress data source (e.g. the Congress.gov API) is wired up.
+//
+
+import Foundation
+
+enum SampleData {
+    /// A few representative bills for the home feed.
+    static let bills: [Bill] = {
+        let now = Date()
+        func daysAgo(_ days: Int) -> Date {
+            Calendar.current.date(byAdding: .day, value: -days, to: now) ?? now
+        }
+
+        return [
+            Bill(
+                title: "H.R. 1842 — Clean Energy Innovation Act",
+                summary: "Expands tax credits for residential solar and battery storage, and directs the Department of Energy to fund grid-modernization grants for rural communities.",
+                chamber: .house,
+                status: .passedHouse,
+                latestActionDate: daysAgo(1),
+                topics: ["Energy", "Environment", "Taxes"]
+            ),
+            Bill(
+                title: "S. 920 — Veterans Mental Health Access Act",
+                summary: "Removes copays for the first six mental-health visits at VA facilities and funds expanded tele-health counseling for veterans in remote areas.",
+                chamber: .senate,
+                status: .inCommittee,
+                latestActionDate: daysAgo(2),
+                topics: ["Veterans", "Healthcare"]
+            ),
+            Bill(
+                title: "H.R. 305 — Small Business Relief & Fairness Act",
+                summary: "Raises the simplified-expensing threshold for small businesses and streamlines federal loan applications for firms with fewer than 50 employees.",
+                chamber: .house,
+                status: .introduced,
+                latestActionDate: daysAgo(3),
+                topics: ["Economy", "Small Business"]
+            ),
+            Bill(
+                title: "S. 1156 — Coastal Resilience Funding Act",
+                summary: "Authorizes $4B over five years for flood-control infrastructure and wetland restoration in coastal states facing rising sea levels.",
+                chamber: .senate,
+                status: .passedSenate,
+                latestActionDate: daysAgo(5),
+                topics: ["Infrastructure", "Environment"]
+            ),
+            Bill(
+                title: "H.R. 77 — Digital Privacy Protection Act",
+                summary: "Establishes a national standard requiring companies to let consumers delete personal data and opt out of targeted advertising.",
+                chamber: .house,
+                status: .toPresident,
+                latestActionDate: daysAgo(6),
+                topics: ["Technology", "Privacy"]
+            ),
+            Bill(
+                title: "S. 64 — Rural Broadband Expansion Act",
+                summary: "Provides matching grants to extend high-speed internet to unserved rural areas and caps installation fees for low-income households.",
+                chamber: .senate,
+                status: .enacted,
+                latestActionDate: daysAgo(9),
+                topics: ["Infrastructure", "Technology"]
+            ),
+        ]
+    }()
+
+    /// The user's current congressional delegation (placeholder).
+    static let representatives: [Representative] = {
+        let now = Date()
+        func yearsAgo(_ years: Int) -> Date {
+            Calendar.current.date(byAdding: .year, value: -years, to: now) ?? now
+        }
+        func daysAgo(_ days: Int) -> Date {
+            Calendar.current.date(byAdding: .day, value: -days, to: now) ?? now
+        }
+
+        return [
+            Representative(
+                name: "Alex Rivera",
+                party: .democrat,
+                office: .senator,
+                state: "California",
+                officeLatitude: 37.7749,
+                officeLongitude: -122.4194,
+                tenureStart: yearsAgo(11),
+                committees: ["Appropriations", "Judiciary", "Energy & Natural Resources"],
+                keyVotes: [
+                    VoteRecord(billTitle: "H.R. 1842 — Clean Energy Innovation Act", position: .yea, date: daysAgo(1)),
+                    VoteRecord(billTitle: "S. 1156 — Coastal Resilience Funding Act", position: .yea, date: daysAgo(5)),
+                    VoteRecord(billTitle: "H.R. 305 — Small Business Relief & Fairness Act", position: .nay, date: daysAgo(3)),
+                ],
+                sponsoredBills: [
+                    "S. 1156 — Coastal Resilience Funding Act",
+                    "S. 64 — Rural Broadband Expansion Act",
+                ],
+                cosponsoredBills: [
+                    "H.R. 1842 — Clean Energy Innovation Act",
+                    "S. 920 — Veterans Mental Health Access Act",
+                ],
+                funders: [
+                    Funder(name: "Renewable Energy PAC", amount: 412_000, category: "Energy"),
+                    Funder(name: "Tech Workers United", amount: 305_500, category: "Technology"),
+                    Funder(name: "Education Association", amount: 188_200, category: "Education"),
+                ]
+            ),
+            Representative(
+                name: "Jordan Bennett",
+                party: .republican,
+                office: .senator,
+                state: "California",
+                officeLatitude: 34.0522,
+                officeLongitude: -118.2437,
+                tenureStart: yearsAgo(5),
+                committees: ["Armed Services", "Finance", "Small Business"],
+                keyVotes: [
+                    VoteRecord(billTitle: "H.R. 305 — Small Business Relief & Fairness Act", position: .yea, date: daysAgo(3)),
+                    VoteRecord(billTitle: "S. 1156 — Coastal Resilience Funding Act", position: .nay, date: daysAgo(5)),
+                    VoteRecord(billTitle: "S. 64 — Rural Broadband Expansion Act", position: .yea, date: daysAgo(9)),
+                ],
+                sponsoredBills: [
+                    "H.R. 305 — Small Business Relief & Fairness Act",
+                ],
+                cosponsoredBills: [
+                    "S. 64 — Rural Broadband Expansion Act",
+                ],
+                funders: [
+                    Funder(name: "Small Business Coalition", amount: 521_000, category: "Business"),
+                    Funder(name: "Defense Industries Group", amount: 398_750, category: "Defense"),
+                    Funder(name: "Agriculture Federation", amount: 142_900, category: "Agriculture"),
+                ]
+            ),
+            Representative(
+                name: "Sam Carter",
+                party: .independent,
+                office: .representative,
+                state: "California",
+                district: 12,
+                officeLatitude: 37.8044,
+                officeLongitude: -122.2712,
+                tenureStart: yearsAgo(3),
+                committees: ["Science, Space & Technology", "Transportation & Infrastructure"],
+                keyVotes: [
+                    VoteRecord(billTitle: "H.R. 77 — Digital Privacy Protection Act", position: .yea, date: daysAgo(6)),
+                    VoteRecord(billTitle: "H.R. 1842 — Clean Energy Innovation Act", position: .yea, date: daysAgo(1)),
+                    VoteRecord(billTitle: "H.R. 305 — Small Business Relief & Fairness Act", position: .notVoting, date: daysAgo(3)),
+                ],
+                sponsoredBills: [
+                    "H.R. 77 — Digital Privacy Protection Act",
+                ],
+                cosponsoredBills: [
+                    "H.R. 1842 — Clean Energy Innovation Act",
+                    "S. 64 — Rural Broadband Expansion Act",
+                ],
+                funders: [
+                    Funder(name: "Digital Rights Network", amount: 96_400, category: "Technology"),
+                    Funder(name: "Grassroots Donors", amount: 84_100, category: "Individuals"),
+                    Funder(name: "Transit Advocates", amount: 51_300, category: "Infrastructure"),
+                ]
+            ),
+        ]
+    }()
+}
