@@ -1,0 +1,15 @@
+# Secrets — never commit real API keys. Copy Secrets.example.plist to
+# Secrets.plist and fill in your key locally.
+Secrets.plist
+
+# Xcode
+.DS_Store
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM

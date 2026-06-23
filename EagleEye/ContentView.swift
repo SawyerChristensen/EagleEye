@@ -15,12 +15,13 @@ enum AppTab: Hashable {
 
 struct ContentView: View {
     @State private var selection: AppTab = .home
+    @State private var store = RepresentativesStore()
 
     var body: some View {
         TabView(selection: $selection) {
             // Left tab: the user's congressional delegation.
             Tab("Your Reps", systemImage: "person.2", value: .representatives) {
-                RepresentativesView(representatives: SampleData.representatives)
+                RepresentativesView(representatives: store.representatives)
             }
 
             // Center tab: the home feed of bills in Congress.
@@ -32,6 +33,10 @@ struct ContentView: View {
             Tab("Map", systemImage: "map", value: .map) {
                 DistrictMapView(representatives: SampleData.representatives)
             }
+        }
+        .task {
+            // TODO: derive the state from the user's location or settings.
+            await store.load(state: "CA")
         }
     }
 }

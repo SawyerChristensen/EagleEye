@@ -56,6 +56,8 @@ struct Representative: Identifiable, Codable, Hashable {
     let state: String
     /// District number for House members; `nil` for senators.
     let district: Int?
+    /// Congress.gov Bioguide identifier (e.g. "P000197"); `nil` for sample data.
+    let bioguideID: String?
     /// Approximate location of the member's district office, used on the map.
     let officeLatitude: Double
     let officeLongitude: Double
@@ -112,6 +114,7 @@ struct Representative: Identifiable, Codable, Hashable {
         office: Office,
         state: String,
         district: Int? = nil,
+        bioguideID: String? = nil,
         officeLatitude: Double,
         officeLongitude: Double,
         portraitURL: URL? = nil,
@@ -128,6 +131,7 @@ struct Representative: Identifiable, Codable, Hashable {
         self.office = office
         self.state = state
         self.district = district
+        self.bioguideID = bioguideID
         self.officeLatitude = officeLatitude
         self.officeLongitude = officeLongitude
         self.portraitURL = portraitURL
