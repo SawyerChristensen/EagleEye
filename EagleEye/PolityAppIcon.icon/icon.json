@@ -18,6 +18,7 @@
   "groups" : [
     {
       "blur-material" : null,
+      "hidden" : false,
       "layers" : [
         {
           "glass" : false,

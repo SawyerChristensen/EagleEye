@@ -16,8 +16,22 @@ enum AppTab: Hashable {
 struct ContentView: View {
     @State private var selection: AppTab = .home
     @State private var store = RepresentativesStore()
+    @State private var location = LocationManager()
 
     var body: some View {
+        switch store.loadState {
+        case .locating, .denied:
+            LocationPromptView(
+                isDenied: store.loadState == .denied,
+                onRequestLocation: resolveLocation,
+                onUseSampleData: store.continueWithSampleData
+            )
+        case .loading, .ready:
+            mainTabs
+        }
+    }
+
+    private var mainTabs: some View {
         TabView(selection: $selection) {
             // Left tab: the user's congressional delegation.
             Tab("Your Reps", systemImage: "person.2", value: .representatives) {
@@ -34,9 +48,16 @@ struct ContentView: View {
                 DistrictMapView(representatives: SampleData.representatives)
             }
         }
-        .task {
-            // TODO: derive the state from the user's location or settings.
-            await store.load(state: "CA")
+    }
+
+    /// Asks for the user's location, then loads their delegation. Falls back to
+    /// the denied state (with sample data) if access isn't granted.
+    private func resolveLocation() async {
+        do {
+            let coordinate = try await location.requestLocation()
+            await store.loadDelegation(at: coordinate)
+        } catch {
+            store.locationAccessDenied()
         }
     }
 }

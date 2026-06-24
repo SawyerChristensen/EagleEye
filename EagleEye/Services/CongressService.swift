@@ -3,12 +3,28 @@
 //  EagleEye
 //
 //  A thin client for the Congress.gov API (https://api.congress.gov).
-//  Used to load the current congressional delegation, including each
-//  member's official portrait.
+//  Used to load informatin about the current congressional delegation
 //
-//  Get a free API key at https://api.congress.gov/sign-up/ and supply it
-//  via the CONGRESS_GOV_API_KEY environment variable, a `CongressGovAPIKey`
-//  entry in Info.plist, or by replacing `apiKeyPlaceholder` below.
+//  ---------------------------------------------------------------------------
+//  Setting up your own Congress.gov API key
+//  ---------------------------------------------------------------------------
+//  The Congress.gov API is free, but each developer needs their own key.
+//  To get one and wire it into the app:
+//
+//    1. Request a key at https://api.congress.gov/sign-up/. It is free and
+//       arrives by email, usually within a minute.
+//    2. In the EagleEye/EagleEye folder, copy `Secrets.example.plist` to a
+//       new file named `Secrets.plist` (same folder). `Secrets.plist` is
+//       gitignored, so your key never gets committed or pushed to GitHub.
+//    3. Open `Secrets.plist` and replace the `YOUR_CONGRESS_GOV_API_KEY`
+//       placeholder with the key from your email, then build and run.
+//
+//  Prefer not to use a file? You can instead set the `CONGRESS_GOV_API_KEY`
+//  environment variable in your scheme, or add a `CongressGovAPIKey` entry to
+//  Info.plist. See `configuredAPIKey` below for the full resolution order.
+//
+//  Until a real key is configured the app falls back to bundled sample data,
+//  so it still runs and shows placeholder representatives out of the box.
 //
 
 import Foundation
@@ -42,7 +58,10 @@ struct CongressService {
     /// two-letter postal code (e.g. "CA"). Returns the state's senators and
     /// all of its House members.
     func currentMembers(forState stateCode: String) async throws -> [Representative] {
+        print("🔍 CongressService: Starting fetch for state \(stateCode)...")
+        
         guard !apiKey.isEmpty, apiKey != Self.apiKeyPlaceholder else {
+            print("🚨 CongressService Error: API key is missing or still set to placeholder!")
             throw ServiceError.missingAPIKey
         }
 
@@ -56,16 +75,73 @@ struct CongressService {
             URLQueryItem(name: "api_key", value: apiKey),
         ]
 
-        let (data, response) = try await session.data(from: components.url!)
+        guard let url = components.url else {
+            print("🚨 CongressService Error: Failed to construct URL from components.")
+            throw URLError(.badURL)
+        }
+        
+        print("🌐 CongressService: Requesting URL: \(url.absoluteString.replacingOccurrences(of: apiKey, with: "REDACTED_KEY"))")
+
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(from: url)
+            print("📥 CongressService: Received raw payload (\(data.count) bytes).")
+        } catch {
+            print("🚨 CongressService Network Error: \(error.localizedDescription)")
+            throw error
+        }
+        
         guard let http = response as? HTTPURLResponse else {
+            print("🚨 CongressService Error: Response was not a valid HTTPURLResponse.")
             throw ServiceError.badResponse(-1)
         }
+        
+        print("📊 CongressService: HTTP Status Code: \(http.statusCode)")
+        
         guard 200..<300 ~= http.statusCode else {
+            print("🚨 CongressService Error: Bad HTTP Status Code \(http.statusCode).")
+            if let rawString = String(data: data, encoding: .utf8) {
+                print("📄 Server error body response: \(rawString)")
+            }
             throw ServiceError.badResponse(http.statusCode)
         }
 
-        let payload = try JSONDecoder().decode(MemberListResponse.self, from: data)
-        return payload.members.compactMap(Representative.init(member:))
+        // Catching specific decoding errors pinpointed to exact lines/keys
+        do {
+            let payload = try JSONDecoder().decode(MemberListResponse.self, from: data)
+            let mappedRepresentatives = payload.members.compactMap(Representative.init(member:))
+            print("✅ CongressService Success: Successfully decoded and mapped \(mappedRepresentatives.count) representatives.")
+            return mappedRepresentatives
+        } catch let decodingError as DecodingError {
+            print("🚨 CongressService JSON Decoding Failure!")
+            switch decodingError {
+            case .typeMismatch(let type, let context):
+                print("❌ Type Mismatch: Expected \(type) at coding path: \(context.codingPath.map(\.stringValue).joined(separator: "."))")
+                print("💡 Context: \(context.debugDescription)")
+            case .valueNotFound(let type, let context):
+                print("❌ Value Not Found: Expected \(type) at coding path: \(context.codingPath.map(\.stringValue).joined(separator: "."))")
+                print("💡 Context: \(context.debugDescription)")
+            case .keyNotFound(let key, let context):
+                print("❌ Key Not Found: Missing key '\(key.stringValue)' at coding path: \(context.codingPath.map(\.stringValue).joined(separator: "."))")
+                print("💡 Context: \(context.debugDescription)")
+            case .dataCorrupted(let context):
+                print("❌ Data Corrupted at coding path: \(context.codingPath.map(\.stringValue).joined(separator: "."))")
+                print("💡 Context: \(context.debugDescription)")
+            @unknown default:
+                print("❌ Unknown decoding error: \(decodingError)")
+            }
+            
+            // Helpful step to see the exact structural anomaly causing the crash
+            if let rawJSONString = String(data: data, encoding: .utf8) {
+                print("📝 Raw JSON Payload context begins below:")
+                print(String(rawJSONString.prefix(2000))) // Print up to first 2000 characters so console isn't flooded
+            }
+            throw decodingError
+        } catch {
+            print("🚨 CongressService Unexpected error during decoding phase: \(error)")
+            throw error
+        }
     }
 
     /// Resolves the API key from, in order: the `CONGRESS_GOV_API_KEY`
@@ -75,29 +151,33 @@ struct CongressService {
     static var configuredAPIKey: String {
         if let env = ProcessInfo.processInfo.environment["CONGRESS_GOV_API_KEY"],
            !env.isEmpty {
+            print("🔑 CongressService Key Resolution: Using key from Environment Variable.")
             return env
         }
         if let secret = secretsValue(forKey: "CongressGovAPIKey") {
+            print("🔑 CongressService Key Resolution: Using key from Secrets.plist.")
             return secret
         }
         if let plist = Bundle.main.object(forInfoDictionaryKey: "CongressGovAPIKey") as? String,
            !plist.isEmpty {
+            print("🔑 CongressService Key Resolution: Using key from Info.plist.")
             return plist
         }
+        print("⚠️ CongressService Key Resolution WARNING: No key detected. Defaulting to placeholder.")
         return apiKeyPlaceholder
     }
 
     /// Reads a string from the bundled `Secrets.plist`, if present. Returns nil
     /// when the file or key is missing or empty (e.g. on a fresh clone).
     private static func secretsValue(forKey key: String) -> String? {
-        guard
-            let url = Bundle.main.url(forResource: "Secrets", withExtension: "plist"),
-            let data = try? Data(contentsOf: url),
-            let plist = try? PropertyListSerialization.propertyList(from: data, format: nil),
-            let dict = plist as? [String: Any],
-            let value = dict[key] as? String,
-            !value.isEmpty
-        else {
+        guard let url = Bundle.main.url(forResource: "Secrets", withExtension: "plist") else {
+            return nil
+        }
+        guard let data = try? Data(contentsOf: url),
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil),
+              let dict = plist as? [String: Any],
+              let value = dict[key] as? String,
+              !value.isEmpty else {
             return nil
         }
         return value
@@ -106,19 +186,15 @@ struct CongressService {
 
 // MARK: - Wire format
 
-/// The top-level shape of a Congress.gov member-list response.
 private struct MemberListResponse: Decodable {
     let members: [MemberDTO]
 }
 
-/// A single member as returned by the Congress.gov list endpoints.
 struct MemberDTO: Decodable {
     let bioguideId: String
-    /// The member's name in "Last, First Middle" order.
     let name: String
     let partyName: String?
     let state: String
-    /// Present for House members; `nil` for senators.
     let district: Int?
     let depiction: Depiction?
     let terms: Terms?
@@ -128,7 +204,6 @@ struct MemberDTO: Decodable {
         let attribution: String?
     }
 
-    /// The API nests the list of terms under an `item` array.
     struct Terms: Decodable {
         let item: [Term]
     }
@@ -143,15 +218,9 @@ struct MemberDTO: Decodable {
 // MARK: - Mapping
 
 extension Representative {
-    /// Builds a domain `Representative` from a Congress.gov member record.
-    ///
-    /// Note: the member endpoint does not provide office coordinates, so
-    /// `officeLatitude`/`officeLongitude` default to 0 — the map needs a
-    /// separate geocoding pass before it can plot live members.
     init?(member: MemberDTO) {
         let terms = member.terms?.item ?? []
 
-        // The most recent term tells us the member's current chamber.
         let latestTerm = terms.max { ($0.startYear ?? 0) < ($1.startYear ?? 0) }
         let chamber = latestTerm?.chamber
             ?? (member.district == nil ? "Senate" : "House of Representatives")
@@ -165,7 +234,6 @@ extension Representative {
         default: party = .independent
         }
 
-        // Tenure starts at the earliest term we have on record.
         let tenureStart = terms.compactMap(\.startYear).min()
             .flatMap { Calendar.current.date(from: DateComponents(year: $0, month: 1, day: 1)) }
             ?? Date()
@@ -184,7 +252,6 @@ extension Representative {
         )
     }
 
-    /// Converts the API's "Last, First Middle" into display order "First Middle Last".
     private static func displayName(fromInvertedOrder name: String) -> String {
         let parts = name
             .split(separator: ",", maxSplits: 1)
