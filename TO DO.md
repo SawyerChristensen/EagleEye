@@ -4,9 +4,14 @@
 - [x] Initial UI mockups and project architecture
 - [x] Implement representative lookup by user location
 - [ ] Make the home feed pull real data via Congress API
+- [ ] Populate the representatives profile with data in the defined sections
+- [ ] Add office contact information in representatives profile
+  - [ ] Link to their social media?
+- [ ] Add statistic on how good they are at beating the market/"insider trading/corruption" meter?
 - [ ] Integrate ProPublica API for voting records and sponsored bills? Is this needed?
 - [ ] Integrate OpenFEC API for campaign finance data visualizations
-- [ ] Build the interactive map view (evaluate performance and utility)
+- [ ] Build the interactive map view (evaluate performance and utility) (fill with party color, representative icon in the middle)
+  - [ ] Zoom out to state level to see governor + senator
 - [ ] Implement local caching for offline viewing
 - [ ] Localization framework setup for multi-language support (Spanish, French, etc.)
 
