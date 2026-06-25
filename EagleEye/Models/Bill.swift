@@ -42,7 +42,7 @@ enum BillStatus: String, Codable, CaseIterable {
 /// `summary` is the human-readable description displayed underneath it.
 struct Bill: Identifiable, Codable, Hashable {
     let id: UUID
-    /// The official short name, e.g. "H.R. 1234 — Clean Water Act".
+    /// The official short name, e.g. "Clean Water Act — H.R. 1234".
     let title: String
     /// A plain-language summary used as the feed description.
     let summary: String

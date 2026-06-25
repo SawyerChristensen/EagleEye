@@ -32,7 +32,7 @@ struct LocationPromptView: View {
                     .font(.title.weight(.semibold))
                     .multilineTextAlignment(.center)
 
-                Text("Polity uses your location to find your two senators and your district's House representative.")
+                Text("Politica uses your location to find your two senators and your district's House representative.")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

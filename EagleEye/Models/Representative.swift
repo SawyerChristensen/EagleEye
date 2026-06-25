@@ -83,6 +83,30 @@ struct Representative: Identifiable, Codable, Hashable {
         CLLocationCoordinate2D(latitude: officeLatitude, longitude: officeLongitude)
     }
 
+    /// Returns a copy with the sponsored and cosponsored bill lists replaced,
+    /// used to fill in those profile sections after the member's legislation is
+    /// loaded from Congress.gov.
+    func withBills(sponsored: [String], cosponsored: [String]) -> Representative {
+        Representative(
+            id: id,
+            name: name,
+            party: party,
+            office: office,
+            state: state,
+            district: district,
+            bioguideID: bioguideID,
+            officeLatitude: officeLatitude,
+            officeLongitude: officeLongitude,
+            portraitURL: portraitURL,
+            tenureStart: tenureStart,
+            committees: committees,
+            keyVotes: keyVotes,
+            sponsoredBills: sponsored,
+            cosponsoredBills: cosponsored,
+            funders: funders
+        )
+    }
+
     /// A short subtitle like "Senator · California (D)".
     var subtitle: String {
         switch office {

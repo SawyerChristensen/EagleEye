@@ -14,6 +14,10 @@ import Observation
 /// House member), then loads that delegation from the Congress.gov API. Falls
 /// back to bundled sample data when no API key is configured, so the app still
 /// has something to show out of the box.
+///
+/// The resolved coordinate and delegation are cached on disk, so after the very
+/// first launch the app shows the user's representatives immediately and never
+/// has to ask for their location again — meaning "Allow Once" is enough.
 @MainActor
 @Observable
 final class RepresentativesStore {
@@ -37,19 +41,41 @@ final class RepresentativesStore {
     private let service: CongressService
     private let geocoder: CensusGeocoder
 
+    /// The last coordinate we successfully resolved a delegation for. Persisted
+    /// so future launches can refresh without prompting for location again.
+    private var cachedCoordinate: CLLocationCoordinate2D?
+
     init(
         service: CongressService = CongressService(),
         geocoder: CensusGeocoder = CensusGeocoder()
     ) {
         self.service = service
         self.geocoder = geocoder
+
+        // If we resolved the delegation on a previous launch, show it right away
+        // and skip the location prompt entirely.
+        if let cache = Self.loadCache(), !cache.representatives.isEmpty {
+            representatives = cache.representatives
+            cachedCoordinate = cache.coordinate
+            loadState = .ready
+        }
     }
+
+    /// Whether a coordinate was cached from a previous launch, letting the app
+    /// refresh the delegation without asking for location again.
+    var hasCachedLocation: Bool { cachedCoordinate != nil }
 
     /// Resolves `coordinate` into a state and district, then loads the user's
     /// senators and their one House member.
-    func loadDelegation(at coordinate: CLLocationCoordinate2D) async {
-        loadState = .loading
-        statusMessage = nil
+    ///
+    /// When `silent` is true the visible state is left untouched while the fetch
+    /// runs (and the cached delegation is kept on failure), so a background
+    /// refresh never flashes a spinner or wipes out good data.
+    func loadDelegation(at coordinate: CLLocationCoordinate2D, silent: Bool = false) async {
+        if !silent {
+            loadState = .loading
+            statusMessage = nil
+        }
 
         await Task {
             do {
@@ -57,22 +83,40 @@ final class RepresentativesStore {
                 // A missing district just means we can't single out the House
                 // member; the senators are still correct.
                 let district = try? await geocoder.congressionalDistrict(at: coordinate)
-                
+
                 let members = try await service.currentMembers(forState: stateCode)
-                representatives = Self.delegation(from: members, district: district)
+                let delegation = Self.delegation(from: members, district: district)
+                representatives = await Self.enrichedProfiles(for: delegation, using: service)
+                cachedCoordinate = coordinate
+                Self.saveCache(coordinate: coordinate, representatives: representatives)
                 loadState = .ready
             } catch CongressService.ServiceError.missingAPIKey {
-                representatives = SampleData.representatives
-                statusMessage = "Showing sample data — add a Congress.gov API key to load live representatives."
-                loadState = .ready
-            } catch {
-                statusMessage = error.localizedDescription
-                if representatives.isEmpty {
+                // No key configured: keep any cached delegation on a silent
+                // refresh, otherwise show sample data.
+                if !silent {
                     representatives = SampleData.representatives
+                    statusMessage = "Showing sample data — add a Congress.gov API key to load live representatives."
+                    loadState = .ready
                 }
-                loadState = .ready
+            } catch {
+                // A background refresh that fails should leave the cached
+                // delegation exactly as it was.
+                if !silent {
+                    statusMessage = error.localizedDescription
+                    if representatives.isEmpty {
+                        representatives = SampleData.representatives
+                    }
+                    loadState = .ready
+                }
             }
         }.value
+    }
+
+    /// Refreshes the delegation using the coordinate saved on a previous launch,
+    /// without re-prompting for location. No-op when nothing has been cached yet.
+    func refreshUsingCachedLocation() async {
+        guard let coordinate = cachedCoordinate else { return }
+        await loadDelegation(at: coordinate, silent: true)
     }
 
     /// Records that location access was denied and shows sample data so the app
@@ -114,6 +158,24 @@ final class RepresentativesStore {
         return (senators + (houseMember.map { [$0] } ?? [])).sorted(by: delegationOrder)
     }
 
+    /// Fills in each member's sponsored/cosponsored bill sections from
+    /// Congress.gov, fetching all members concurrently while preserving order.
+    private static func enrichedProfiles(
+        for delegation: [Representative],
+        using service: CongressService
+    ) async -> [Representative] {
+        await withTaskGroup(of: (Int, Representative).self) { group in
+            for (index, rep) in delegation.enumerated() {
+                group.addTask { (index, await service.enrichedProfile(for: rep)) }
+            }
+            var enriched = delegation
+            for await (index, rep) in group {
+                enriched[index] = rep
+            }
+            return enriched
+        }
+    }
+
     /// Reverse-geocodes a coordinate to its two-letter state postal code.
     private func stateCode(for coordinate: CLLocationCoordinate2D) async throws -> String {
         let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
@@ -132,5 +194,40 @@ final class RepresentativesStore {
             return lhs.office == .senator
         }
         return (lhs.district ?? 0) < (rhs.district ?? 0)
+    }
+
+    // MARK: - Cache
+
+    /// The on-disk snapshot of a resolved delegation: the coordinate it was
+    /// resolved for plus the representatives themselves.
+    private struct DelegationCache: Codable {
+        let latitude: Double
+        let longitude: Double
+        let representatives: [Representative]
+
+        var coordinate: CLLocationCoordinate2D {
+            CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        }
+    }
+
+    private static let cacheKey = "cachedDelegation"
+
+    /// Persists a freshly resolved delegation so the next launch can skip the
+    /// location prompt.
+    private static func saveCache(coordinate: CLLocationCoordinate2D, representatives: [Representative]) {
+        let cache = DelegationCache(
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude,
+            representatives: representatives
+        )
+        if let data = try? JSONEncoder().encode(cache) {
+            UserDefaults.standard.set(data, forKey: cacheKey)
+        }
+    }
+
+    /// Loads the delegation saved on a previous launch, if any.
+    private static func loadCache() -> DelegationCache? {
+        guard let data = UserDefaults.standard.data(forKey: cacheKey) else { return nil }
+        return try? JSONDecoder().decode(DelegationCache.self, from: data)
     }
 }

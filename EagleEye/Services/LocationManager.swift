@@ -25,7 +25,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         var errorDescription: String? {
             switch self {
             case .denied:
-                "Polity doesn't have permission to use your location."
+                "Politica doesn't have permission to use your location."
             case .unavailable:
                 "Your location couldn't be determined."
             }

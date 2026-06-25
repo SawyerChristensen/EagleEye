@@ -76,25 +76,8 @@ struct RepresentativeDetailView: View {
     private var sponsorshipSection: some View {
         ProfileSection(title: "Bills", systemImage: "doc.text") {
             VStack(alignment: .leading, spacing: 14) {
-                billGroup(title: "Sponsored", bills: representative.sponsoredBills)
-                billGroup(title: "Cosponsored", bills: representative.cosponsoredBills)
-            }
-        }
-    }
-
-    private func billGroup(title: String, bills: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("\(title) (\(bills.count))")
-                .font(.subheadline.bold())
-                .foregroundStyle(.secondary)
-            if bills.isEmpty {
-                EmptyNote("None.")
-            } else {
-                ForEach(bills, id: \.self) { bill in
-                    Text("• \(bill)")
-                        .font(.body)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                BillGroup(title: "Sponsored", bills: representative.sponsoredBills)
+                BillGroup(title: "Cosponsored", bills: representative.cosponsoredBills)
             }
         }
     }
@@ -156,6 +139,95 @@ private struct EmptyNote: View {
         Text(text)
             .font(.subheadline)
             .foregroundStyle(.secondary)
+    }
+}
+
+/// A titled list of bills that collapses to a few rows when long, fading the
+/// overflow under a gradient with a chevron to expand or collapse it.
+private struct BillGroup: View {
+    let title: String
+    let bills: [String]
+
+    @State private var isExpanded = false
+
+    /// Height of the collapsed list — enough to show a few bills before fading.
+    private let collapsedHeight: CGFloat = 132
+    /// Only worth collapsing once there are more bills than fit comfortably.
+    private var isCollapsible: Bool { bills.count > 3 }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("\(title) (\(bills.count))")
+                .font(.subheadline.bold())
+                .foregroundStyle(.secondary)
+
+            if bills.isEmpty {
+                EmptyNote("None.")
+            } else if isCollapsible {
+                collapsibleList
+            } else {
+                billRows
+            }
+        }
+    }
+
+    private var billRows: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(bills, id: \.self) { bill in
+                Text("• \(bill)")
+                    .font(.body)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private var collapsibleList: some View {
+        VStack(spacing: 0) {
+            if isExpanded {
+                billRows
+                expandButton
+                    .padding(.top, 10)
+            } else {
+                ZStack(alignment: .bottom) {
+                    billRows
+                        .frame(maxHeight: collapsedHeight, alignment: .top)
+                        .clipped()
+                        .mask(fadeMask)
+
+                    expandButton
+                }
+            }
+        }
+    }
+
+    /// Fades the bottom of the collapsed list out so the cut-off bill trails
+    /// off rather than ending abruptly.
+    private var fadeMask: LinearGradient {
+        LinearGradient(
+            stops: [
+                .init(color: .black, location: 0),
+                .init(color: .black, location: 0.6),
+                .init(color: .clear, location: 1),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private var expandButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.25)) { isExpanded.toggle() }
+        } label: {
+            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+                .padding(8)
+                .background(.thinMaterial, in: .circle)
+                .overlay(Circle().strokeBorder(.quaternary, lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isExpanded ? "Show fewer \(title.lowercased()) bills" : "Show all \(title.lowercased()) bills")
     }
 }
 

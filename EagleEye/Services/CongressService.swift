@@ -144,6 +144,220 @@ struct CongressService {
         }
     }
 
+    /// Returns a copy of `representative` with its sponsored and cosponsored bill
+    /// lists filled in from the member's Congress.gov legislation endpoints. The
+    /// two lookups run concurrently. Sample members (no Bioguide ID) and any
+    /// failed lookup leave the corresponding section unchanged/empty.
+    func enrichedProfile(for representative: Representative, limit: Int = 20) async -> Representative {
+        guard let bioguideID = representative.bioguideID else { return representative }
+
+        async let sponsored = legislationTitles(
+            SponsoredLegislationResponse.self,
+            path: "member/\(bioguideID)/sponsored-legislation",
+            limit: limit
+        )
+        async let cosponsored = legislationTitles(
+            CosponsoredLegislationResponse.self,
+            path: "member/\(bioguideID)/cosponsored-legislation",
+            limit: limit
+        )
+
+        return representative.withBills(sponsored: await sponsored, cosponsored: await cosponsored)
+    }
+
+    /// Loads a member's sponsored or cosponsored legislation and formats each
+    /// entry into its familiar short name. Returns an empty list on failure.
+    private func legislationTitles<T: LegislationListResponse>(
+        _ type: T.Type,
+        path: String,
+        limit: Int
+    ) async -> [String] {
+        guard let response = try? await getJSON(
+            type,
+            path: path,
+            queryItems: [URLQueryItem(name: "limit", value: String(limit))]
+        ) else {
+            return []
+        }
+        return response.items.compactMap { item in
+            guard let title = item.title, !title.isEmpty else { return nil }
+            return Bill.displayTitle(type: item.type, number: item.number, title: title)
+        }
+    }
+
+    /// Fetches the bills most recently acted on in the current Congress, newest
+    /// first. These power the home feed of legislation moving through Congress.
+    func recentBills(limit: Int = 20) async throws -> [Bill] {
+        print("🔍 CongressService: Starting fetch for recent bills...")
+
+        guard !apiKey.isEmpty, apiKey != Self.apiKeyPlaceholder else {
+            print("🚨 CongressService Error: API key is missing or still set to placeholder!")
+            throw ServiceError.missingAPIKey
+        }
+
+        var components = URLComponents(
+            string: "https://api.congress.gov/v3/bill/\(Self.currentCongress)"
+        )!
+        components.queryItems = [
+            // Sort by most recently updated so the feed surfaces active bills.
+            URLQueryItem(name: "sort", value: "updateDate+desc"),
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "format", value: "json"),
+            URLQueryItem(name: "api_key", value: apiKey),
+        ]
+
+        guard let url = components.url else {
+            print("🚨 CongressService Error: Failed to construct URL from components.")
+            throw URLError(.badURL)
+        }
+
+        print("🌐 CongressService: Requesting URL: \(url.absoluteString.replacingOccurrences(of: apiKey, with: "REDACTED_KEY"))")
+
+        let (data, response) = try await session.data(from: url)
+        print("📥 CongressService: Received raw payload (\(data.count) bytes).")
+
+        guard let http = response as? HTTPURLResponse else {
+            print("🚨 CongressService Error: Response was not a valid HTTPURLResponse.")
+            throw ServiceError.badResponse(-1)
+        }
+
+        print("📊 CongressService: HTTP Status Code: \(http.statusCode)")
+
+        guard 200..<300 ~= http.statusCode else {
+            print("🚨 CongressService Error: Bad HTTP Status Code \(http.statusCode).")
+            if let rawString = String(data: data, encoding: .utf8) {
+                print("📄 Server error body response: \(rawString)")
+            }
+            throw ServiceError.badResponse(http.statusCode)
+        }
+
+        let payload = try JSONDecoder().decode(BillListResponse.self, from: data)
+
+        // The list endpoint omits summaries and policy areas, so enrich each
+        // bill with its own detail requests. Run them concurrently and restore
+        // the original (most-recent-first) ordering afterward.
+        let bills = await withTaskGroup(of: (Int, Bill?).self) { group in
+            for (index, dto) in payload.bills.enumerated() {
+                group.addTask { (index, await self.enriched(dto)) }
+            }
+            var collected: [(Int, Bill)] = []
+            for await (index, bill) in group {
+                if let bill { collected.append((index, bill)) }
+            }
+            return collected.sorted { $0.0 < $1.0 }.map(\.1)
+        }
+
+        print("✅ CongressService Success: Decoded and enriched \(bills.count) bills.")
+        return bills
+    }
+
+    /// Enriches a list-level bill with its real plain-language summary and
+    /// policy area, each of which lives behind a separate detail request. If
+    /// either lookup fails the base bill (latest-action text, no topics) stands.
+    private func enriched(_ dto: BillDTO) async -> Bill? {
+        guard let base = Bill(dto: dto) else { return nil }
+        guard let congress = dto.congress, let type = dto.type, let number = dto.number else {
+            return base
+        }
+
+        let path = "bill/\(congress)/\(type.lowercased())/\(number)"
+        async let summary = latestSummaryText(path: path)
+        async let policyArea = policyAreaName(path: path)
+
+        return base.withDetails(
+            summary: (await summary).map { Self.cleanedSummary($0, title: dto.title) },
+            topics: (await policyArea).map { [$0] } ?? []
+        )
+    }
+
+    /// Tidies a CRS summary for display by stripping content the feed already
+    /// shows elsewhere: a leading copy of the bill's title (which appears in
+    /// the bill's title) and the boilerplate "This bill" opener.
+    private static func cleanedSummary(_ summary: String, title: String?) -> String {
+        var text = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Drop the bill's title where it's repeated inside the summary.
+        if let title, !title.isEmpty {
+            text = text.replacingOccurrences(of: title, with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        // Drop the boilerplate "This bill" opener.
+        if text.hasPrefix("This bill") {
+            text = String(text.dropFirst("This bill".count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            // Re-capitalize the new leading word so the summary reads cleanly.
+            text = text.prefix(1).uppercased() + text.dropFirst()
+        }
+
+        return text
+    }
+
+    /// Fetches the most recent CRS summary for a bill and reduces its HTML to
+    /// plain text. Returns nil when the bill has no summary yet.
+    private func latestSummaryText(path: String) async -> String? {
+        guard let response = try? await getJSON(SummariesResponse.self, path: "\(path)/summaries"),
+              let html = response.summaries
+                .filter({ $0.text?.isEmpty == false })
+                .max(by: { ($0.updateDate ?? "") < ($1.updateDate ?? "") })?
+                .text else {
+            return nil
+        }
+        let text = Self.plainText(fromHTML: html)
+        return text.isEmpty ? nil : text
+    }
+
+    /// Fetches a bill's broad policy area (e.g. "Health", "Taxation").
+    private func policyAreaName(path: String) async -> String? {
+        guard let response = try? await getJSON(BillDetailResponse.self, path: path),
+              let name = response.bill.policyArea?.name, !name.isEmpty else {
+            return nil
+        }
+        return name
+    }
+
+    /// Performs a GET against the Congress.gov API and decodes the response,
+    /// appending the shared `format` and `api_key` query items.
+    private func getJSON<T: Decodable>(
+        _ type: T.Type,
+        path: String,
+        queryItems: [URLQueryItem] = []
+    ) async throws -> T {
+        var components = URLComponents(string: "https://api.congress.gov/v3/\(path)")!
+        components.queryItems = queryItems + [
+            URLQueryItem(name: "format", value: "json"),
+            URLQueryItem(name: "api_key", value: apiKey),
+        ]
+        guard let url = components.url else { throw URLError(.badURL) }
+
+        let (data, response) = try await session.data(from: url)
+        guard let http = response as? HTTPURLResponse else {
+            throw ServiceError.badResponse(-1)
+        }
+        guard 200..<300 ~= http.statusCode else {
+            throw ServiceError.badResponse(http.statusCode)
+        }
+        return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    /// Strips HTML tags and decodes common entities from a CRS summary, leaving
+    /// readable plain text for the feed and detail screens.
+    private static func plainText(fromHTML html: String) -> String {
+        var text = html.replacingOccurrences(
+            of: "<[^>]+>", with: "", options: .regularExpression
+        )
+        let entities = [
+            "&amp;": "&", "&lt;": "<", "&gt;": ">",
+            "&quot;": "\"", "&#39;": "'", "&nbsp;": " ",
+        ]
+        for (entity, replacement) in entities {
+            text = text.replacingOccurrences(of: entity, with: replacement)
+        }
+        return text
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// Resolves the API key from, in order: the `CONGRESS_GOV_API_KEY`
     /// environment variable, the bundled (gitignored) `Secrets.plist`, or the
     /// `CongressGovAPIKey` Info.plist entry. Falls back to the placeholder when
@@ -260,3 +474,167 @@ extension Representative {
         return "\(parts[1]) \(parts[0])"
     }
 }
+
+// MARK: - Member legislation wire format
+
+/// Shared shape for the sponsored- and cosponsored-legislation endpoints, which
+/// return the same list of bills under different top-level keys.
+private protocol LegislationListResponse: Decodable {
+    var items: [LegislationDTO] { get }
+}
+
+private struct SponsoredLegislationResponse: LegislationListResponse {
+    let sponsoredLegislation: [LegislationDTO]
+    var items: [LegislationDTO] { sponsoredLegislation }
+}
+
+private struct CosponsoredLegislationResponse: LegislationListResponse {
+    let cosponsoredLegislation: [LegislationDTO]
+    var items: [LegislationDTO] { cosponsoredLegislation }
+}
+
+private struct LegislationDTO: Decodable {
+    let type: String?
+    let number: String?
+    let title: String?
+}
+
+// MARK: - Bill wire format
+
+private struct BillListResponse: Decodable {
+    let bills: [BillDTO]
+}
+
+struct BillDTO: Decodable {
+    let congress: Int?
+    let type: String?
+    let number: String?
+    let title: String?
+    let originChamber: String?
+    let latestAction: LatestAction?
+
+    struct LatestAction: Decodable {
+        let actionDate: String?
+        let text: String?
+    }
+}
+
+private struct SummariesResponse: Decodable {
+    let summaries: [SummaryDTO]
+
+    struct SummaryDTO: Decodable {
+        let text: String?
+        let updateDate: String?
+    }
+}
+
+private struct BillDetailResponse: Decodable {
+    let bill: BillDetail
+
+    struct BillDetail: Decodable {
+        let policyArea: PolicyArea?
+
+        struct PolicyArea: Decodable {
+            let name: String?
+        }
+    }
+}
+
+// MARK: - Bill mapping
+
+extension Bill {
+    /// Builds a feed `Bill` from a Congress.gov list entry. The list endpoint
+    /// doesn't include a plain-language summary or policy areas, so we surface
+    /// the latest action text as the description and leave topics empty.
+    init?(dto: BillDTO) {
+        guard let rawTitle = dto.title, !rawTitle.isEmpty else { return nil }
+
+        let chamber: Chamber = (dto.originChamber ?? "").localizedCaseInsensitiveContains("senate")
+            ? .senate : .house
+        let actionText = dto.latestAction?.text
+
+        self.init(
+            title: Self.displayTitle(type: dto.type, number: dto.number, title: rawTitle),
+            summary: actionText ?? "No recent action recorded.",
+            chamber: chamber,
+            status: Self.status(fromAction: actionText),
+            latestActionDate: Self.parseDate(dto.latestAction?.actionDate) ?? Date(),
+            topics: []
+        )
+    }
+
+    /// Returns a copy of the bill with its summary and topics replaced by the
+    /// enriched detail-endpoint values, keeping the latest-action text only when
+    /// no real summary is available.
+    func withDetails(summary newSummary: String?, topics: [String]) -> Bill {
+        Bill(
+            id: id,
+            title: title,
+            summary: (newSummary?.isEmpty == false) ? newSummary! : summary,
+            chamber: chamber,
+            status: status,
+            latestActionDate: latestActionDate,
+            topics: topics
+        )
+    }
+
+    /// Formats a bill into its familiar short name, e.g. "Clean Water Act — H.R. 1234".
+    static func displayTitle(type: String?, number: String?, title: String) -> String {
+        guard let number, !number.isEmpty, let prefix = typePrefix(type) else {
+            return title
+        }
+        return "\(title) — \(prefix) \(number)"
+    }
+
+    private static func typePrefix(_ type: String?) -> String? {
+        switch type?.uppercased() {
+        case "HR": "H.R."
+        case "S": "S."
+        case "HRES": "H.Res."
+        case "SRES": "S.Res."
+        case "HJRES": "H.J.Res."
+        case "SJRES": "S.J.Res."
+        case "HCONRES": "H.Con.Res."
+        case "SCONRES": "S.Con.Res."
+        default: nil
+        }
+    }
+
+    /// Infers where the bill sits in the process from its latest action text,
+    /// which is the only progress signal the list endpoint provides.
+    private static func status(fromAction text: String?) -> BillStatus {
+        let text = text?.lowercased() ?? ""
+        if text.contains("became public law") || text.contains("became law")
+            || text.contains("signed by president") {
+            return .enacted
+        }
+        if text.contains("presented to president") || text.contains("to president") {
+            return .toPresident
+        }
+        if text.contains("passed senate") || text.contains("agreed to in senate") {
+            return .passedSenate
+        }
+        if text.contains("passed house") || text.contains("agreed to in house") {
+            return .passedHouse
+        }
+        if text.contains("committee") || text.contains("referred to") {
+            return .inCommittee
+        }
+        return .introduced
+    }
+
+    /// Parses a Congress.gov "yyyy-MM-dd" action date.
+    private static func parseDate(_ string: String?) -> Date? {
+        guard let string else { return nil }
+        return billDateFormatter.date(from: string)
+    }
+}
+
+/// Shared formatter for the "yyyy-MM-dd" dates Congress.gov returns.
+private let billDateFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(identifier: "America/New_York")
+    formatter.dateFormat = "yyyy-MM-dd"
+    return formatter
+}()

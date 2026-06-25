@@ -16,6 +16,7 @@ enum AppTab: Hashable {
 struct ContentView: View {
     @State private var selection: AppTab = .home
     @State private var store = RepresentativesStore()
+    @State private var billsStore = BillsStore()
     @State private var location = LocationManager()
 
     var body: some View {
@@ -28,6 +29,17 @@ struct ContentView: View {
             )
         case .loading, .ready:
             mainTabs
+                .task {
+                    // We launched straight into the app from a cached
+                    // delegation; quietly refresh it using the saved coordinate
+                    // so the data stays current without re-prompting.
+                    await store.refreshUsingCachedLocation()
+                }
+                .task {
+                    // Load the home feed of bills (uses cached results first,
+                    // then refreshes from the API).
+                    await billsStore.load()
+                }
         }
     }
 
@@ -39,8 +51,12 @@ struct ContentView: View {
             }
 
             // Center tab: the home feed of bills in Congress.
-            Tab("Home", systemImage: "house", value: .home) {
-                HomeFeedView(bills: SampleData.bills)
+            Tab("Recent", systemImage: "building.columns", value: .home) {
+                HomeFeedView(
+                    bills: billsStore.bills,
+                    isLoading: billsStore.loadState == .loading,
+                    onRefresh: billsStore.load
+                )
             }
 
             // Right tab: a map of the representatives' offices.

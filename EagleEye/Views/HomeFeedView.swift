@@ -9,17 +9,28 @@ import SwiftUI
 
 struct HomeFeedView: View {
     let bills: [Bill]
+    var isLoading: Bool = false /// True while bills are being fetched and there's nothing to show yet.
+    var onRefresh: (() async -> Void)? = nil /// Pull-to-refresh handler; omitted in previews and when not applicable.
 
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(bills) { bill in
-                    NavigationLink(value: bill) {
-                        BillRow(bill: bill)
+            Group {
+                if bills.isEmpty && isLoading {
+                    ProgressView("Loading bills…")
+                } else {
+                    List {
+                        ForEach(bills) { bill in
+                            NavigationLink(value: bill) {
+                                BillRow(bill: bill)
+                            }
+                        }
+                    }
+                    .listStyle(.plain)
+                    .refreshable {
+                        await onRefresh?()
                     }
                 }
             }
-            .listStyle(.plain)
             .navigationTitle("Congress")
             .navigationDestination(for: Bill.self) { bill in
                 BillDetailView(bill: bill)

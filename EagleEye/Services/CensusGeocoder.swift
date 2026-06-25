@@ -11,9 +11,8 @@ import Foundation
 import CoreLocation
 
 /// Looks up the congressional district that contains a coordinate. The Census
-/// geocoder returns every geography a point falls in; we pull out the
-/// congressional-district layer (its name varies by Congress, e.g. "119th
-/// Congressional Districts").
+/// geocoder returns every geography a point falls in; we pull out the congressional-district layer
+/// (its name varies by Congress, e.g. "119th Congressional Districts").
 struct CensusGeocoder {
     enum GeocoderError: LocalizedError {
         case badResponse(Int)
@@ -28,9 +27,7 @@ struct CensusGeocoder {
 
     var session: URLSession = .shared
 
-    /// Returns the district number for `coordinate`, or `nil` if the point
-    /// isn't inside a known congressional district. At-large districts come
-    /// back as `0`.
+    /// Returns the district number for `coordinate`, or `nil` if the point isn't inside a known congressional district. At-large districts come back as `0`.
     func congressionalDistrict(at coordinate: CLLocationCoordinate2D) async throws -> Int? {
         var components = URLComponents(
             string: "https://geocoding.geo.census.gov/geocoder/geographies/coordinates"
