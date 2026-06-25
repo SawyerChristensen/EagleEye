@@ -107,6 +107,52 @@ struct Representative: Identifiable, Codable, Hashable {
         )
     }
 
+    /// Returns a copy with the voting history replaced, used to fill in that
+    /// profile section after the member's recent floor votes are loaded.
+    func withVotes(_ keyVotes: [VoteRecord]) -> Representative {
+        Representative(
+            id: id,
+            name: name,
+            party: party,
+            office: office,
+            state: state,
+            district: district,
+            bioguideID: bioguideID,
+            officeLatitude: officeLatitude,
+            officeLongitude: officeLongitude,
+            portraitURL: portraitURL,
+            tenureStart: tenureStart,
+            committees: committees,
+            keyVotes: keyVotes,
+            sponsoredBills: sponsoredBills,
+            cosponsoredBills: cosponsoredBills,
+            funders: funders
+        )
+    }
+
+    /// Returns a copy with the committee list replaced, used to fill in that
+    /// profile section after the member's assignments are loaded.
+    func withCommittees(_ committees: [String]) -> Representative {
+        Representative(
+            id: id,
+            name: name,
+            party: party,
+            office: office,
+            state: state,
+            district: district,
+            bioguideID: bioguideID,
+            officeLatitude: officeLatitude,
+            officeLongitude: officeLongitude,
+            portraitURL: portraitURL,
+            tenureStart: tenureStart,
+            committees: committees,
+            keyVotes: keyVotes,
+            sponsoredBills: sponsoredBills,
+            cosponsoredBills: cosponsoredBills,
+            funders: funders
+        )
+    }
+
     /// A short subtitle like "Senator · California (D)".
     var subtitle: String {
         switch office {

@@ -9,9 +9,13 @@
     - [x] Remove title and "This bill" from sumarries
   - [ ] Rank each bill based on how far it got (introduced)/(committee)/(congress)/(presidents desk)/(signed into law) most important information should be on top. there should be an importance trait that decays with time
 - [ ] Populate the representatives profile with data in the defined sections
-  - [ ] Committees
+  - [x] Committees
   - [x] Bills
   - [ ] Voting History
+    - [ ] House Representatives
+      - [ ] Summarize votes, (discard in-committee ones)
+      - [ ] Use same collapsable view that the bills use
+    - [ ] For Senators (need senate.gov API)
   - [ ] Top Funders
   - [ ] Add office contact information in representatives profile
     - [ ] Link to their social media?

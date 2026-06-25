@@ -144,10 +144,10 @@ struct CongressService {
         }
     }
 
-    /// Returns a copy of `representative` with its sponsored and cosponsored bill
-    /// lists filled in from the member's Congress.gov legislation endpoints. The
-    /// two lookups run concurrently. Sample members (no Bioguide ID) and any
-    /// failed lookup leave the corresponding section unchanged/empty.
+    /// Returns a copy of `representative` with its sponsored/cosponsored bill
+    /// lists and recent voting history filled in from the member's Congress.gov
+    /// endpoints. The lookups run concurrently. Sample members (no Bioguide ID)
+    /// and any failed lookup leave the corresponding section unchanged/empty.
     func enrichedProfile(for representative: Representative, limit: Int = 20) async -> Representative {
         guard let bioguideID = representative.bioguideID else { return representative }
 
@@ -161,8 +161,117 @@ struct CongressService {
             path: "member/\(bioguideID)/cosponsored-legislation",
             limit: limit
         )
+        async let votes = votingHistory(for: representative)
 
-        return representative.withBills(sponsored: await sponsored, cosponsored: await cosponsored)
+        return representative
+            .withBills(sponsored: await sponsored, cosponsored: await cosponsored)
+            .withVotes(await votes)
+    }
+
+    // MARK: - Voting history
+
+    /// Returns the member's most recent House floor votes, newest first.
+    ///
+    /// The Congress.gov roll-call vote endpoints cover the House of
+    /// Representatives only (from the 118th Congress onward), so senators and
+    /// sample members (no Bioguide ID) yield an empty list.
+    func votingHistory(for representative: Representative, limit: Int = 8) async -> [VoteRecord] {
+        guard representative.office == .representative,
+              let bioguideID = representative.bioguideID else {
+            return []
+        }
+
+        let recentVotes = await recentHouseVotes(limit: limit)
+        guard !recentVotes.isEmpty else { return [] }
+
+        // Look up this member's position on each vote concurrently, restoring
+        // the newest-first ordering afterward.
+        return await withTaskGroup(of: (Int, VoteRecord?).self) { group in
+            for (index, vote) in recentVotes.enumerated() {
+                group.addTask { (index, await self.voteRecord(for: bioguideID, on: vote)) }
+            }
+            var collected: [(Int, VoteRecord)] = []
+            for await (index, record) in group {
+                if let record { collected.append((index, record)) }
+            }
+            return collected.sorted { $0.0 < $1.0 }.map(\.1)
+        }
+    }
+
+    /// Fetches the most recent House roll-call votes of the current Congress,
+    /// newest first. Both sessions are pulled and merged because the list
+    /// endpoint returns votes in an arbitrary order and isn't sortable, so the
+    /// newest `limit` across both sessions are selected client-side.
+    private func recentHouseVotes(limit: Int) async -> [HouseVoteDTO] {
+        async let firstSession = houseVotes(session: 1)
+        async let secondSession = houseVotes(session: 2)
+        let votes = await firstSession + secondSession
+        return votes
+            .sorted { ($0.startDate ?? "") > ($1.startDate ?? "") }
+            .prefix(limit)
+            .map { $0 }
+    }
+
+    /// Loads one session's House roll-call vote list. Returns an empty list on
+    /// any failure or for a session that hasn't taken place yet.
+    private func houseVotes(session: Int) async -> [HouseVoteDTO] {
+        let response = try? await getJSON(
+            HouseVoteListResponse.self,
+            path: "house-vote/\(Self.currentCongress)/\(session)",
+            queryItems: [URLQueryItem(name: "limit", value: "250")]
+        )
+        return response?.houseRollCallVotes ?? []
+    }
+
+    /// Looks up how a member voted on a single roll call, returning nil when the
+    /// member wasn't recorded on it or the lookup fails. The member-level
+    /// endpoint carries the vote's question, legislation, and date alongside
+    /// each member's position, so one request yields a complete record.
+    private func voteRecord(for bioguideID: String, on vote: HouseVoteDTO) async -> VoteRecord? {
+        guard let session = vote.sessionNumber, let number = vote.rollCallNumber,
+              let response = try? await getJSON(
+                HouseVoteMembersResponse.self,
+                path: "house-vote/\(Self.currentCongress)/\(session)/\(number)/members"
+              ) else {
+            return nil
+        }
+
+        let detail = response.houseRollCallVoteMemberVotes
+        guard let member = detail.results.first(where: { $0.bioguideID == bioguideID }) else {
+            return nil
+        }
+
+        return VoteRecord(
+            billTitle: Self.voteTitle(for: detail),
+            position: Self.position(fromCast: member.voteCast),
+            date: Self.parseVoteDate(detail.startDate) ?? Date()
+        )
+    }
+
+    /// Builds a readable label for a vote from its question and the legislation
+    /// it concerned, e.g. "On Passage — H.R. 3424". Falls back to the question
+    /// alone for procedural votes not tied to a numbered bill.
+    private static func voteTitle(for vote: HouseVoteMemberVotes) -> String {
+        let question = vote.voteQuestion?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let base = (question?.isEmpty == false) ? question! : "Roll call vote"
+        return Bill.displayTitle(type: vote.legislationType, number: vote.legislationNumber, title: base)
+    }
+
+    /// Maps the House clerk's recorded vote ("Yea"/"Aye", "Nay"/"No", "Present",
+    /// "Not Voting") onto the app's simpler position model.
+    private static func position(fromCast cast: String?) -> VotePosition {
+        switch cast?.lowercased() {
+        case "yea", "aye", "yes": .yea
+        case "nay", "no": .nay
+        default: .notVoting
+        }
+    }
+
+    /// Parses the ISO-8601 timestamps the vote endpoints return, e.g.
+    /// "2026-02-24T14:18:00-05:00".
+    private static func parseVoteDate(_ string: String?) -> Date? {
+        guard let string else { return nil }
+        return voteDateFormatter.date(from: string)
     }
 
     /// Loads a member's sponsored or cosponsored legislation and formats each
@@ -519,6 +628,39 @@ struct BillDTO: Decodable {
     }
 }
 
+// MARK: - House roll-call vote wire format
+
+private struct HouseVoteListResponse: Decodable {
+    let houseRollCallVotes: [HouseVoteDTO]
+}
+
+/// One entry from the roll-call vote list endpoint. Only the fields needed to
+/// order the votes and address each member-level lookup are decoded.
+private struct HouseVoteDTO: Decodable {
+    let rollCallNumber: Int?
+    let sessionNumber: Int?
+    let startDate: String?
+}
+
+private struct HouseVoteMembersResponse: Decodable {
+    let houseRollCallVoteMemberVotes: HouseVoteMemberVotes
+}
+
+/// The member-level vote payload: the vote's question, legislation, and date,
+/// plus how every House member was recorded.
+private struct HouseVoteMemberVotes: Decodable {
+    let voteQuestion: String?
+    let legislationType: String?
+    let legislationNumber: String?
+    let startDate: String?
+    let results: [MemberVoteDTO]
+}
+
+private struct MemberVoteDTO: Decodable {
+    let bioguideID: String
+    let voteCast: String?
+}
+
 private struct SummariesResponse: Decodable {
     let summaries: [SummaryDTO]
 
@@ -629,6 +771,10 @@ extension Bill {
         return billDateFormatter.date(from: string)
     }
 }
+
+/// Shared formatter for the ISO-8601 timestamps the roll-call vote endpoints
+/// return (e.g. "2026-02-24T14:18:00-05:00").
+private let voteDateFormatter = ISO8601DateFormatter()
 
 /// Shared formatter for the "yyyy-MM-dd" dates Congress.gov returns.
 private let billDateFormatter: DateFormatter = {

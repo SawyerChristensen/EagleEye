@@ -40,6 +40,7 @@ final class RepresentativesStore {
 
     private let service: CongressService
     private let geocoder: CensusGeocoder
+    private let committeeService: CommitteeService
 
     /// The last coordinate we successfully resolved a delegation for. Persisted
     /// so future launches can refresh without prompting for location again.
@@ -47,10 +48,12 @@ final class RepresentativesStore {
 
     init(
         service: CongressService = CongressService(),
-        geocoder: CensusGeocoder = CensusGeocoder()
+        geocoder: CensusGeocoder = CensusGeocoder(),
+        committeeService: CommitteeService = CommitteeService()
     ) {
         self.service = service
         self.geocoder = geocoder
+        self.committeeService = committeeService
 
         // If we resolved the delegation on a previous launch, show it right away
         // and skip the location prompt entirely.
@@ -86,7 +89,11 @@ final class RepresentativesStore {
 
                 let members = try await service.currentMembers(forState: stateCode)
                 let delegation = Self.delegation(from: members, district: district)
-                representatives = await Self.enrichedProfiles(for: delegation, using: service)
+                representatives = await Self.enrichedProfiles(
+                    for: delegation,
+                    using: service,
+                    committeeService: committeeService
+                )
                 cachedCoordinate = coordinate
                 Self.saveCache(coordinate: coordinate, representatives: representatives)
                 loadState = .ready
@@ -158,13 +165,20 @@ final class RepresentativesStore {
         return (senators + (houseMember.map { [$0] } ?? [])).sorted(by: delegationOrder)
     }
 
-    /// Fills in each member's sponsored/cosponsored bill sections from
-    /// Congress.gov, fetching all members concurrently while preserving order.
+    /// Fills in each member's profile: sponsored/cosponsored bills from
+    /// Congress.gov (fetched per member, concurrently) and committee assignments
+    /// from the shared committee dataset (fetched once for the whole delegation).
+    /// Both run concurrently and member order is preserved.
     private static func enrichedProfiles(
         for delegation: [Representative],
-        using service: CongressService
+        using service: CongressService,
+        committeeService: CommitteeService
     ) async -> [Representative] {
-        await withTaskGroup(of: (Int, Representative).self) { group in
+        // Kick off the single committee-dataset fetch alongside the per-member
+        // bill lookups so they overlap.
+        async let assignments = committeeService.committeeAssignments()
+
+        let billEnriched = await withTaskGroup(of: (Int, Representative).self) { group in
             for (index, rep) in delegation.enumerated() {
                 group.addTask { (index, await service.enrichedProfile(for: rep)) }
             }
@@ -173,6 +187,15 @@ final class RepresentativesStore {
                 enriched[index] = rep
             }
             return enriched
+        }
+
+        let committeesByID = await assignments
+        return billEnriched.map { rep in
+            guard let id = rep.bioguideID,
+                  let committees = committeesByID[id], !committees.isEmpty else {
+                return rep
+            }
+            return rep.withCommittees(committees)
         }
     }
 

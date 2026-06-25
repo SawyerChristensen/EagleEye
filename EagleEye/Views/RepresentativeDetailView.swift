@@ -65,7 +65,7 @@ struct RepresentativeDetailView: View {
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(representative.committees, id: \.self) { committee in
-                        Label(committee, systemImage: "checkmark.seal")
+                        Text("• \(committee)")
                             .font(.body)
                     }
                 }
@@ -174,7 +174,7 @@ private struct BillGroup: View {
     private var billRows: some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(bills, id: \.self) { bill in
-                Text("• \(bill)")
+                Label(bill, systemImage: "checkmark.seal")
                     .font(.body)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
