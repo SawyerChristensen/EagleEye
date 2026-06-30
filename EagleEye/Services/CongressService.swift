@@ -422,8 +422,12 @@ struct CongressService {
         async let summary = latestSummaryText(path: path)
         async let policyArea = policyAreaName(path: path)
 
+        let rawSummary = await summary
         return base.withDetails(
-            summary: (await summary).map { Self.cleanedSummary($0, title: response.bill.title) },
+            summary: rawSummary.map { Self.cleanedSummary($0, title: response.bill.title) },
+            acronymExpansion: rawSummary.flatMap {
+                Self.acronymExpansion(fromSummary: $0, shortTitle: base.displayName)
+            },
             topics: (await policyArea).map { [$0] } ?? []
         )
     }
@@ -585,22 +589,40 @@ struct CongressService {
         async let summary = latestSummaryText(path: path)
         async let policyArea = policyAreaName(path: path)
 
+        let rawSummary = await summary
         return base.withDetails(
-            summary: (await summary).map { Self.cleanedSummary($0, title: dto.title) },
+            summary: rawSummary.map { Self.cleanedSummary($0, title: dto.title) },
+            acronymExpansion: rawSummary.flatMap {
+                Self.acronymExpansion(fromSummary: $0, shortTitle: base.displayName)
+            },
             topics: (await policyArea).map { [$0] } ?? []
         )
     }
 
     /// Tidies a CRS summary for display by stripping content the feed already
-    /// shows elsewhere: a leading copy of the bill's title (which appears in
-    /// the bill's title) and the boilerplate "This bill" opener.
+    /// shows elsewhere: a leading title block (CRS opens each summary with the
+    /// bill's title — sometimes "<long title> or the <short title>" — on its
+    /// own line) and the boilerplate "This bill" opener.
     private static func cleanedSummary(_ summary: String, title: String?) -> String {
-        var text = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        var paragraphs = summary
+            .components(separatedBy: "\n\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
 
-        // Drop the bill's title where it's repeated inside the summary.
-        if let title, !title.isEmpty {
-            text = text.replacingOccurrences(of: title, with: "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+        // Drop the leading title line. Removing the whole paragraph is cleaner
+        // than excising just the title string, which would leave behind the
+        // "or the …" scaffolding and a dangling comma.
+        if paragraphs.count > 1, isTitleLine(paragraphs[0], title: title) {
+            paragraphs.removeFirst()
+        }
+
+        var text = paragraphs.joined(separator: "\n\n")
+
+        // Fallback for summaries that inline the title in the opening sentence
+        // rather than on a separate line.
+        if let title, !title.isEmpty, text.hasPrefix(title) {
+            text = String(text.dropFirst(title.count))
+                .trimmingCharacters(in: CharacterSet(charactersIn: " ,–—-\n"))
         }
 
         // Drop the boilerplate "This bill" opener.
@@ -612,6 +634,74 @@ struct CongressService {
         }
 
         return text
+    }
+
+    /// Extracts the full title an acronym-named bill stands for, drawn from the
+    /// title line that opens its CRS summary. CRS writes these as
+    /// "<full title> or the <short title>" (e.g. "Secure Auction For Energy
+    /// Reserves Act of 2023 or the SAFER Act of 2023"); when the short title is
+    /// an acronym, the full title is worth surfacing as a subtitle. Returns nil
+    /// when the bill isn't acronym-named or no expansion is present.
+    static func acronymExpansion(fromSummary summary: String, shortTitle: String) -> String? {
+        // Only bills whose name carries an acronym get an expansion.
+        guard titleContainsAcronym(shortTitle) else { return nil }
+
+        // The expansion lives in the summary's opening title line.
+        guard let titleLine = summary
+            .components(separatedBy: "\n\n")
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !titleLine.isEmpty else { return nil }
+
+        // CRS joins the full and short titles with "or the"; split on the last
+        // occurrence in case the full title itself contains the phrase.
+        guard let separator = titleLine.range(
+            of: " or the ", options: [.backwards, .caseInsensitive]
+        ) else { return nil }
+
+        let expansion = String(titleLine[..<separator.lowerBound])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Guard against degenerate lines that just echo the short title.
+        guard !expansion.isEmpty,
+              expansion.localizedCaseInsensitiveCompare(shortTitle) != .orderedSame else {
+            return nil
+        }
+        return expansion
+    }
+
+    /// Whether a title carries an acronym — a run of two or more uppercase
+    /// letters (e.g. "SAFER", "KIDS") that a full title would expand. Generic
+    /// suffix words like "Act" are mixed-case and don't qualify.
+    private static func titleContainsAcronym(_ title: String) -> Bool {
+        let words = title.split { !$0.isLetter && !$0.isNumber }
+        return words.contains { word in
+            let letters = word.filter { $0.isLetter }
+            return letters.count >= 2 && letters.allSatisfy { $0.isUppercase }
+        }
+    }
+
+    /// Whether a paragraph is a CRS title line — the bill's title sitting on
+    /// its own, rather than substantive summary text. Used to strip the
+    /// redundant title block that opens most summaries.
+    private static func isTitleLine(_ paragraph: String, title: String?) -> Bool {
+        // Title lines are short; real summary paragraphs run much longer.
+        guard paragraph.count <= 200 else { return false }
+
+        // The strongest signal: the line contains the bill's known title.
+        if let title, !title.isEmpty,
+           paragraph.localizedCaseInsensitiveContains(title) {
+            return true
+        }
+
+        // No title to match against: treat a short opening line that names an
+        // Act/Resolution, doesn't start a sentence, and isn't punctuated like
+        // prose as a title block.
+        let namesMeasure = paragraph.range(
+            of: "\\b(Act|Resolution)\\b", options: .regularExpression
+        ) != nil
+        let startsSentence = paragraph.hasPrefix("This ") || paragraph.hasPrefix("To ")
+        return namesMeasure && !startsSentence && !paragraph.hasSuffix(".")
     }
 
     /// Fetches the most recent CRS summary for a bill and reduces its HTML to
@@ -662,11 +752,28 @@ struct CongressService {
     }
 
     /// Strips HTML tags and decodes common entities from a CRS summary, leaving
-    /// readable plain text for the feed and detail screens.
+    /// readable plain text for the feed and detail screens. Block-level
+    /// boundaries (`<p>`, `<br>`, list items) are preserved as paragraph breaks
+    /// so sentences in separate paragraphs don't run together.
     private static func plainText(fromHTML html: String) -> String {
-        var text = html.replacingOccurrences(
+        var text = html
+
+        // Turn block-level tags into paragraph breaks before stripping the
+        // rest. CRS summaries wrap each paragraph in <p> and sometimes
+        // enumerate provisions with <ul>/<li>; without this, adjacent
+        // sentences across a "</p><p>" boundary collapse into one another.
+        let breakTags = "p|br|li|ul|ol|div|tr|h[1-6]|blockquote"
+        text = text.replacingOccurrences(
+            of: "</?(?:\(breakTags))[^>]*>",
+            with: "\n\n",
+            options: [.regularExpression, .caseInsensitive]
+        )
+
+        // Strip every remaining (inline) tag.
+        text = text.replacingOccurrences(
             of: "<[^>]+>", with: "", options: .regularExpression
         )
+
         let entities = [
             "&amp;": "&", "&lt;": "<", "&gt;": ">",
             "&quot;": "\"", "&#39;": "'", "&nbsp;": " ",
@@ -674,8 +781,14 @@ struct CongressService {
         for (entity, replacement) in entities {
             text = text.replacingOccurrences(of: entity, with: replacement)
         }
+
+        // Collapse horizontal whitespace, tidy the space around the line
+        // breaks we inserted, then squeeze runs of blank lines down to a
+        // single paragraph break.
         return text
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "[^\\S\\n]+", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: " *\\n *", with: "\n", options: .regularExpression)
+            .replacingOccurrences(of: "\\n{2,}", with: "\n\n", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -967,11 +1080,16 @@ extension Bill {
     /// Returns a copy of the bill with its summary and topics replaced by the
     /// enriched detail-endpoint values, keeping the latest-action text only when
     /// no real summary is available.
-    func withDetails(summary newSummary: String?, topics: [String]) -> Bill {
+    func withDetails(
+        summary newSummary: String?,
+        acronymExpansion newExpansion: String? = nil,
+        topics: [String]
+    ) -> Bill {
         Bill(
             id: id,
             title: title,
             summary: (newSummary?.isEmpty == false) ? newSummary! : summary,
+            acronymExpansion: newExpansion ?? acronymExpansion,
             chamber: chamber,
             status: status,
             latestActionDate: latestActionDate,

@@ -21,8 +21,15 @@
 - [x] Each profile bill has a right arrow that opens the expanded bill detail screen
 - [x] Voting History uses the same collapsible/fade view that the bills sections use
 - [x] Add the roll-call tally to each bill's detail screen — who voted and which way — with the user's representatives surfaced on top
-- [ ] Each bill should have the HR code next to the "Bill" title on top in the center of the screen, right of the arrow, and not in the main title in the feed
-- [ ] Center the heading/title abvo
+- [x] Each bill should have the HR code next to the "Bill" title on top in the center of the screen, right of the arrow, and not in the main title in the feed
+- [x] Center the heading/title abvo
+- [ ] passed house in home view is squased, also consider removing the pill look
+- [ ] Some bills say "passed house" but dont display a roll call vote
+- [ ] Add another pill after the "passed house" pill that shows what the next step for the bill is or where the bill is now. either in the senate, or if passed both, on the presidents desk, etc. show the future one in grey as it hasnt happened yet.
+- [ ] Some bills say "last action on" and then a date that is older than when the last vote was. 
+- [ ] make the topic pill in the home bills view a lighter system grey. make the sample topic list only have one topic to reflect real bills
+- [ ] have two different tabs in the bill summary. one as the summary with the topic pill, and then another with the vote tally instead of the vote tally being under the summary
+- [ ] something happened to the ranking algorithm. no "enacted laws" are displayed in the top 20
 - [ ] **QOL:** Skip the location loading screen when we already have the user's location
 - [ ] **Bug:** Apple's location is sometimes vague (for privacy) and returns the wrong representative — let the user type in a ZIP code manually as a fallback (or as an option before we even ask for location)
 
@@ -51,6 +58,11 @@
 - [ ] Implement local caching for offline viewing *(partially done: bills and delegation are cached on disk)*
 - [ ] Localization framework setup for multi-language support (Spanish, French, etc.)
 
+---
+
+## 0.6 — iOS integration
+- [ ] Add home screen widgets
+- [ ] Add system notifications for new bills being passed, maybe the ability to bookmark a bill to recieve all notifications about it. 
 ---
 
 ## Version 1.0

@@ -71,40 +71,84 @@ private struct BillRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                StatusBadge(status: bill.status)
-                Spacer()
+                StatusBadge(status: bill.status, chamber: bill.chamber)
+                    .layoutPriority(1)
+
+                if bill.topics.isEmpty {
+                    Spacer(minLength: 8)
+                } else {
+                    TopicPillStrip(topics: bill.topics)
+                }
+
+                // Kept at full size and laid out first so a wide topic strip
+                // fades out before it ever reaches the date.
                 Text(bill.latestActionDate, format: .dateTime.month().day())
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .layoutPriority(1)
             }
 
             Text(bill.displayName)
                 .font(.headline)
 
-            Text(bill.summary)
+            Text(bill.summary.replacingOccurrences(of: "\n", with: " "))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .lineLimit(3)
-
-            if !bill.topics.isEmpty {
-                HStack(spacing: 6) {
-                    ForEach(bill.topics, id: \.self) { topic in
-                        Text(topic)
-                            .font(.caption2)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(.quaternary, in: .capsule)
-                    }
-                }
-            }
         }
         .padding(.vertical, 4)
     }
 }
 
-/// A colored pill describing where the bill is in the process.
+/// A horizontal row of topic pills that takes the slack between the status
+/// badge and the date. When the pills are wider than the available space they
+/// overflow to the trailing edge and fade out, rather than pushing into (or
+/// hiding) the date.
+private struct TopicPillStrip: View {
+    let topics: [String]
+
+    var body: some View {
+        // A hidden, single-character element drives the height (matching the
+        // pills' font + vertical padding, so it scales with Dynamic Type) and
+        // gives the strip a tiny minimum width. The real pills live in an
+        // overlay so their width never forces the row wider or squashes the
+        // status badge — anything past the trailing edge is clipped and faded.
+        Text(" ")
+            .font(.caption2)
+            .padding(.vertical, 3)
+            .hidden()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(alignment: .leading) {
+                HStack(spacing: 6) {
+                    ForEach(topics, id: \.self) { topic in
+                        Text(topic)
+                            .font(.caption2)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(.quaternary, in: .capsule)
+                            .fixedSize()
+                    }
+                }
+            }
+            .mask(
+                HStack(spacing: 0) {
+                    Rectangle()
+                    LinearGradient(
+                        colors: [.black, .clear],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: 20)
+                }
+            )
+        }
+}
+
+/// A colored pill describing where the bill is in the process, with the
+/// chamber folded into a single label (e.g. "Introduced to the House").
 struct StatusBadge: View {
     let status: BillStatus
+    let chamber: Chamber
 
     private var color: Color {
         switch status.tint {
@@ -115,8 +159,10 @@ struct StatusBadge: View {
     }
 
     var body: some View {
-        Text(status.rawValue)
+        Label(status.displayLabel(chamber: chamber), systemImage: chamber.symbolName)
             .font(.caption.weight(.semibold))
+            .lineLimit(1)
+            .fixedSize()
             .foregroundStyle(color)
             .padding(.horizontal, 10)
             .padding(.vertical, 4)

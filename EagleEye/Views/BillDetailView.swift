@@ -25,44 +25,63 @@ struct BillDetailView: View {
         case unavailable
     }
 
+    /// The summary split into its paragraphs, so each renders as its own block
+    /// rather than one undifferentiated wall of text.
+    private var summaryParagraphs: [String] {
+        bill.summary
+            .components(separatedBy: "\n\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(spacing: 16) {
-                    Text(bill.displayName)
-                        .font(.title.bold())
-                        .fontDesign(.serif)
-                        .multilineTextAlignment(.center)
+                    VStack(spacing: 4) {
+                        Text(bill.displayName)
+                            .font(.title.bold())
+                            //.fontDesign(.serif)
+                            .multilineTextAlignment(.center)
 
-                    VStack(spacing: 8) {
-                        if !bill.topics.isEmpty {
-                            HStack(spacing: 6) {
-                                ForEach(bill.topics, id: \.self) { topic in
-                                    Text(topic)
-                                        .font(.caption)
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 5)
-                                        .background(.quaternary, in: .capsule)
-                                }
-                            }
-                        }
-                        
-                        HStack(spacing: 24) {
-                            StatusBadge(status: bill.status)
-                            Label(bill.chamber.rawValue, systemImage: bill.chamber.symbolName)
+                        if let expansion = bill.acronymExpansion {
+                            Text(expansion)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
                         }
                     }
+
+                    StatusBadge(status: bill.status, chamber: bill.chamber)
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
 
                 Divider()
 
+                if !bill.topics.isEmpty {
+                    HStack(spacing: 6) {
+                        Text("Topic:")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        ForEach(bill.topics, id: \.self) { topic in
+                            Text(topic)
+                                .font(.caption)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color(.systemGray5), in: .capsule)
+                        }
+                    }
+                }
+
                 Text("Summary")
                     .font(.headline)
-                Text("\t\(bill.summary)")
-                    .font(.body)
+                    .underline()
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(Array(summaryParagraphs.enumerated()), id: \.offset) { _, paragraph in
+                        Text("\t\(paragraph)")
+                            .font(.body)
+                    }
+                }
 
                 Text("Last action on \(bill.latestActionDate, format: .dateTime.month().day().year())")
                     .font(.footnote)

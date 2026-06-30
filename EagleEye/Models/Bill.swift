@@ -36,6 +36,17 @@ enum BillStatus: String, Codable, CaseIterable {
         case .enacted: "green"
         }
     }
+
+    /// A single label that folds in the chamber where it adds meaning, e.g.
+    /// "Introduced to the House". Stages that already name a chamber
+    /// ("Passed House") or don't involve one ("Enacted") read on their own.
+    func displayLabel(chamber: Chamber) -> String {
+        switch self {
+        case .introduced: "Introduced to the \(chamber.rawValue)"
+        case .inCommittee: "In \(chamber.rawValue) Committee"
+        case .passedHouse, .passedSenate, .toPresident, .enacted: rawValue
+        }
+    }
 }
 
 /// A single bill shown in the home feed. `title` is the name of the bill and
@@ -46,6 +57,10 @@ struct Bill: Identifiable, Codable, Hashable {
     let title: String
     /// A plain-language summary used as the feed description.
     let summary: String
+    /// For acronym-named bills (e.g. "KIDS Act"), the full title the acronym
+    /// stands for (e.g. "Kids Internet and Digital Safety Act"), surfaced as a
+    /// subtitle. `nil` when the bill isn't acronym-named.
+    let acronymExpansion: String?
     let chamber: Chamber
     let status: BillStatus
     /// The date of the most recent action on the bill.
@@ -68,6 +83,7 @@ struct Bill: Identifiable, Codable, Hashable {
         id: UUID = UUID(),
         title: String,
         summary: String,
+        acronymExpansion: String? = nil,
         chamber: Chamber,
         status: BillStatus,
         latestActionDate: Date,
@@ -79,6 +95,7 @@ struct Bill: Identifiable, Codable, Hashable {
         self.id = id
         self.title = title
         self.summary = summary
+        self.acronymExpansion = acronymExpansion
         self.chamber = chamber
         self.status = status
         self.latestActionDate = latestActionDate
