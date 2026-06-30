@@ -499,13 +499,20 @@ struct CongressService {
             throw ServiceError.missingAPIKey
         }
 
+        // The list endpoint can only sort by updateDate (when a record was last
+        // touched), not by latest *action*. Many recently-updated records carry
+        // old actions, so a shallow fetch fills with administratively-touched
+        // bills and hides ones with genuinely recent floor activity. Pull a
+        // deeper pool, rank it by importance, then enrich only the bills we'll
+        // actually show — keeping detail-request volume bounded.
+        let poolLimit = min(250, max(limit * 5, 100))
+
         var components = URLComponents(
             string: "https://api.congress.gov/v3/bill/\(Self.currentCongress)"
         )!
         components.queryItems = [
-            // Sort by most recently updated so the feed surfaces active bills.
             URLQueryItem(name: "sort", value: "updateDate+desc"),
-            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "limit", value: String(poolLimit)),
             URLQueryItem(name: "format", value: "json"),
             URLQueryItem(name: "api_key", value: apiKey),
         ]
@@ -537,11 +544,21 @@ struct CongressService {
 
         let payload = try JSONDecoder().decode(BillListResponse.self, from: data)
 
-        // The list endpoint omits summaries and policy areas, so enrich each
-        // bill with its own detail requests. Run them concurrently and restore
-        // the original (most-recent-first) ordering afterward.
+        // Build base bills (latest-action text only) from the whole pool and
+        // rank them by importance — legislative progress plus recency of the
+        // latest *action* — so the most consequential, recently-acted-on bills
+        // win the limited slots regardless of when their record was last touched.
+        let ranked = payload.bills
+            .compactMap { dto in Bill(dto: dto).map { (dto, $0) } }
+            .sorted { $0.1.importance() > $1.1.importance() }
+            .prefix(limit)
+            .map(\.0)
+
+        // The list endpoint omits summaries and policy areas, so enrich only the
+        // bills we'll show with their own detail requests. Run them concurrently
+        // and restore the ranked ordering afterward.
         let bills = await withTaskGroup(of: (Int, Bill?).self) { group in
-            for (index, dto) in payload.bills.enumerated() {
+            for (index, dto) in ranked.enumerated() {
                 group.addTask { (index, await self.enriched(dto)) }
             }
             var collected: [(Int, Bill)] = []
@@ -551,7 +568,7 @@ struct CongressService {
             return collected.sorted { $0.0 < $1.0 }.map(\.1)
         }
 
-        print("✅ CongressService Success: Decoded and enriched \(bills.count) bills.")
+        print("✅ CongressService Success: Selected and enriched \(bills.count) of \(payload.bills.count) bills by importance.")
         return bills
     }
 
@@ -938,7 +955,7 @@ extension Bill {
             title: Self.displayTitle(type: dto.type, number: dto.number, title: rawTitle),
             summary: actionText ?? "No recent action recorded.",
             chamber: chamber,
-            status: Self.status(fromAction: actionText),
+            status: Self.status(fromAction: actionText, chamber: chamber),
             latestActionDate: Self.parseDate(dto.latestAction?.actionDate) ?? Date(),
             topics: [],
             congress: dto.congress,
@@ -988,14 +1005,17 @@ extension Bill {
     }
 
     /// Infers where the bill sits in the process from its latest action text,
-    /// which is the only progress signal the list endpoint provides.
-    private static func status(fromAction text: String?) -> BillStatus {
+    /// which is the only progress signal the list endpoint provides. `chamber`
+    /// is the bill's origin chamber, used to resolve post-passage procedural
+    /// actions that don't name the chamber themselves.
+    private static func status(fromAction text: String?, chamber: Chamber) -> BillStatus {
         let text = text?.lowercased() ?? ""
         if text.contains("became public law") || text.contains("became law")
             || text.contains("signed by president") {
             return .enacted
         }
-        if text.contains("presented to president") || text.contains("to president") {
+        if text.contains("presented to president") || text.contains("to president")
+            || text.contains("cleared for white house") {
             return .toPresident
         }
         if text.contains("passed senate") || text.contains("agreed to in senate") {
@@ -1003,6 +1023,19 @@ extension Bill {
         }
         if text.contains("passed house") || text.contains("agreed to in house") {
             return .passedHouse
+        }
+        // After a chamber passes a measure its *latest* action is often clean-up
+        // boilerplate or a hand-off to the other chamber — neither of which
+        // names the passing chamber — so a just-passed bill like H.R. 7757
+        // ("Motion to reconsider laid on the table…") would otherwise sink to
+        // "introduced". Treat these as passage, inferring the chamber.
+        if text.contains("received in the senate") { return .passedHouse }
+        if text.contains("received in the house") { return .passedSenate }
+        if text.contains("motion to reconsider laid on the table")
+            || text.contains("held at the desk")
+            || text.contains("ordered to be engrossed")
+            || text.contains("passed/agreed to") {
+            return chamber == .house ? .passedHouse : .passedSenate
         }
         if text.contains("committee") || text.contains("referred to") {
             return .inCommittee

@@ -10,6 +10,7 @@ import SwiftUI
 struct HomeFeedView: View {
     let bills: [Bill]
     var isLoading: Bool = false /// True while bills are being fetched and there's nothing to show yet.
+    var statusMessage: String? = nil /// A note shown above the feed when the latest refresh couldn't replace the data.
     var onRefresh: (() async -> Void)? = nil /// Pull-to-refresh handler; omitted in previews and when not applicable.
 
     var body: some View {
@@ -31,11 +32,35 @@ struct HomeFeedView: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .top) {
+                if let statusMessage {
+                    FeedStatusBanner(text: statusMessage)
+                }
+            }
             .navigationTitle("Congress")
             .navigationDestination(for: Bill.self) { bill in
                 BillDetailView(bill: bill)
             }
         }
+    }
+}
+
+/// A thin banner shown above the feed when the most recent refresh failed or
+/// returned nothing, so the user knows the bills below may be out of date.
+private struct FeedStatusBanner: View {
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+            Text(text)
+                .font(.footnote)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(.orange)
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(.bar)
     }
 }
 
@@ -53,7 +78,7 @@ private struct BillRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            Text(bill.title)
+            Text(bill.displayName)
                 .font(.headline)
 
             Text(bill.summary)

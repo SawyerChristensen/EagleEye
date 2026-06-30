@@ -55,6 +55,7 @@ struct ContentView: View {
                 HomeFeedView(
                     bills: billsStore.bills,
                     isLoading: billsStore.loadState == .loading,
+                    statusMessage: billsStore.statusMessage,
                     onRefresh: billsStore.load
                 )
             }

@@ -48,12 +48,23 @@ final class BillsStore {
     func load() async {
         if bills.isEmpty {
             loadState = .loading
-            statusMessage = nil
         }
+        // Start each attempt clean; the branches below re-raise a message if the
+        // refresh doesn't actually replace the feed.
+        statusMessage = nil
 
         do {
             let fetched = try await service.recentBills()
-            if !fetched.isEmpty {
+            if fetched.isEmpty {
+                // A successful-but-empty response must not silently overwrite a
+                // good cache. If we have nothing else, fall back to samples;
+                // otherwise keep the cache but say it wasn't refreshed.
+                if bills.isEmpty {
+                    bills = SampleData.bills.rankedByImportance()
+                } else {
+                    statusMessage = "Couldn't load newer bills just now — showing saved bills."
+                }
+            } else {
                 let ranked = fetched.rankedByImportance()
                 bills = ranked
                 Self.saveCache(ranked)
@@ -62,13 +73,18 @@ final class BillsStore {
         } catch CongressService.ServiceError.missingAPIKey {
             if bills.isEmpty {
                 bills = SampleData.bills.rankedByImportance()
-                statusMessage = "Showing sample data — add a Congress.gov API key to load live bills."
             }
+            statusMessage = "Showing sample data — add a Congress.gov API key to load live bills."
             loadState = .ready
         } catch {
+            // A failed refresh used to be swallowed whenever a cache was on
+            // screen, leaving the feed silently frozen on stale bills. Surface
+            // it even when we keep showing the cache so the staleness is visible.
             if bills.isEmpty {
                 bills = SampleData.bills.rankedByImportance()
                 statusMessage = error.localizedDescription
+            } else {
+                statusMessage = "Couldn't refresh — showing saved bills. (\(error.localizedDescription))"
             }
             loadState = .ready
         }

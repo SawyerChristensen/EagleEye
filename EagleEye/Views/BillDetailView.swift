@@ -28,36 +28,41 @@ struct BillDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                StatusBadge(status: bill.status)
+                VStack(spacing: 16) {
+                    Text(bill.displayName)
+                        .font(.title.bold())
+                        .fontDesign(.serif)
+                        .multilineTextAlignment(.center)
 
-                Text(bill.title)
-                    .font(.title2.bold())
-
-                Label(bill.chamber.rawValue, systemImage: bill.chamber.symbolName)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    VStack(spacing: 8) {
+                        if !bill.topics.isEmpty {
+                            HStack(spacing: 6) {
+                                ForEach(bill.topics, id: \.self) { topic in
+                                    Text(topic)
+                                        .font(.caption)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 5)
+                                        .background(.quaternary, in: .capsule)
+                                }
+                            }
+                        }
+                        
+                        HStack(spacing: 24) {
+                            StatusBadge(status: bill.status)
+                            Label(bill.chamber.rawValue, systemImage: bill.chamber.symbolName)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
 
                 Divider()
 
                 Text("Summary")
                     .font(.headline)
-                Text(bill.summary)
+                Text("\t\(bill.summary)")
                     .font(.body)
-
-                if !bill.topics.isEmpty {
-                    Text("Topics")
-                        .font(.headline)
-                        .padding(.top, 4)
-                    HStack(spacing: 6) {
-                        ForEach(bill.topics, id: \.self) { topic in
-                            Text(topic)
-                                .font(.caption)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(.quaternary, in: .capsule)
-                        }
-                    }
-                }
 
                 Text("Last action on \(bill.latestActionDate, format: .dateTime.month().day().year())")
                     .font(.footnote)
@@ -69,10 +74,16 @@ struct BillDetailView: View {
 
                 votesSection
             }
-            .padding()
+            .padding(.horizontal)
+            .padding(.bottom)
+            //.padding(.top, 4)
         }
-        .navigationTitle("Bill")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                BillTitleLabel(code: bill.displayCode)
+            }
+        }
         .task { await loadVotes() }
     }
 
@@ -116,6 +127,27 @@ struct BillDetailView: View {
             voteLoad = .loaded
         } else {
             voteLoad = .unavailable
+        }
+    }
+}
+
+// MARK: - Navigation title
+
+/// The inline navigation-bar title for a bill: the word "Bill" with the
+/// measure's code (e.g. "H.R. 1842") alongside it, so the exact code is only
+/// revealed once the user opens the detail screen.
+private struct BillTitleLabel: View {
+    let code: String?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text("Bill")
+                .font(.headline)
+            if let code {
+                Text(code)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }

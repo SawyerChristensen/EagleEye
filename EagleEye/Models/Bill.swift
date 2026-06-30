@@ -125,6 +125,60 @@ struct BillVoteTally: Hashable {
     var total: Int { memberVotes.count }
 }
 
+// MARK: - Display formatting
+
+extension Bill {
+    /// The measure's short code, e.g. "H.R. 1842", shown only in the navigation
+    /// bar on the detail screen. Derived from the type/number identifiers when
+    /// available, otherwise parsed out of the title. `nil` when the bill carries
+    /// no recognizable code.
+    var displayCode: String? {
+        if let prefix = Bill.typePrefix(billType),
+           let billNumber, !billNumber.isEmpty {
+            return "\(prefix) \(billNumber)"
+        }
+        return title
+            .components(separatedBy: " — ")
+            .compactMap { Bill.codeToken($0) }
+            .first
+    }
+
+    /// The bill's name with its measure code stripped off, e.g. "Clean Energy
+    /// Innovation Act". Used in the feed and as the detail screen's title so the
+    /// exact code only surfaces in the navigation bar.
+    var displayName: String {
+        let name = title
+            .components(separatedBy: " — ")
+            .filter { Bill.codeToken($0) == nil }
+            .joined(separator: " — ")
+            .trimmingCharacters(in: .whitespaces)
+        return name.isEmpty ? title : name
+    }
+
+    /// Returns the trimmed text when it looks like a measure code (e.g. "H.R.
+    /// 1842" or "S. 305"), otherwise `nil`.
+    private static func codeToken(_ text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        let pattern = #"^[A-Z][A-Za-z.]*\.\s*\d+$"#
+        return trimmed.range(of: pattern, options: .regularExpression) != nil ? trimmed : nil
+    }
+
+    /// Maps a measure type code (e.g. "HR") to its formatted prefix (e.g. "H.R.").
+    private static func typePrefix(_ type: String?) -> String? {
+        switch type?.uppercased() {
+        case "HR": "H.R."
+        case "S": "S."
+        case "HRES": "H.Res."
+        case "SRES": "S.Res."
+        case "HJRES": "H.J.Res."
+        case "SJRES": "S.J.Res."
+        case "HCONRES": "H.Con.Res."
+        case "SCONRES": "S.Con.Res."
+        default: nil
+        }
+    }
+}
+
 // MARK: - Ranking
 
 extension Bill {
@@ -148,6 +202,11 @@ extension Bill {
         let days = max(0, now.timeIntervalSince(latestActionDate) / 86_400)
         // Exponential decay with a roughly three-week time constant.
         let recency = exp(-days / 21)
+        // Blend legislative progress with recency in roughly equal measure: a
+        // bill near the President's desk outranks one stuck in committee, but a
+        // long-dormant advanced bill sinks beneath fresher activity. This keeps
+        // a healthy mix of stages in the feed rather than letting enacted laws
+        // crowd out recent committee and introduced bills.
         return progressWeight + recency
     }
 }
