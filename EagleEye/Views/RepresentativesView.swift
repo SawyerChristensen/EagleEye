@@ -46,6 +46,9 @@ struct RepresentativesView: View {
             .navigationDestination(for: Representative.self) { rep in
                 RepresentativeDetailView(representative: rep)
             }
+            .navigationDestination(for: LegislationRef.self) { bill in
+                MemberBillDetailView(reference: bill)
+            }
         }
     }
 

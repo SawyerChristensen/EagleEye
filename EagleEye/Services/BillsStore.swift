@@ -54,19 +54,20 @@ final class BillsStore {
         do {
             let fetched = try await service.recentBills()
             if !fetched.isEmpty {
-                bills = fetched
-                Self.saveCache(fetched)
+                let ranked = fetched.rankedByImportance()
+                bills = ranked
+                Self.saveCache(ranked)
             }
             loadState = .ready
         } catch CongressService.ServiceError.missingAPIKey {
             if bills.isEmpty {
-                bills = SampleData.bills
+                bills = SampleData.bills.rankedByImportance()
                 statusMessage = "Showing sample data — add a Congress.gov API key to load live bills."
             }
             loadState = .ready
         } catch {
             if bills.isEmpty {
-                bills = SampleData.bills
+                bills = SampleData.bills.rankedByImportance()
                 statusMessage = error.localizedDescription
             }
             loadState = .ready

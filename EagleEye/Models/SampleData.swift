@@ -94,12 +94,12 @@ enum SampleData {
                     VoteRecord(billTitle: "H.R. 305 — Small Business Relief & Fairness Act", position: .nay, date: daysAgo(3)),
                 ],
                 sponsoredBills: [
-                    "S. 1156 — Coastal Resilience Funding Act",
-                    "S. 64 — Rural Broadband Expansion Act",
+                    LegislationRef(title: "S. 1156 — Coastal Resilience Funding Act"),
+                    LegislationRef(title: "S. 64 — Rural Broadband Expansion Act"),
                 ],
                 cosponsoredBills: [
-                    "H.R. 1842 — Clean Energy Innovation Act",
-                    "S. 920 — Veterans Mental Health Access Act",
+                    LegislationRef(title: "H.R. 1842 — Clean Energy Innovation Act"),
+                    LegislationRef(title: "S. 920 — Veterans Mental Health Access Act"),
                 ],
                 funders: [
                     Funder(name: "Renewable Energy PAC", amount: 412_000, category: "Energy"),
@@ -122,10 +122,10 @@ enum SampleData {
                     VoteRecord(billTitle: "S. 64 — Rural Broadband Expansion Act", position: .yea, date: daysAgo(9)),
                 ],
                 sponsoredBills: [
-                    "H.R. 305 — Small Business Relief & Fairness Act",
+                    LegislationRef(title: "H.R. 305 — Small Business Relief & Fairness Act"),
                 ],
                 cosponsoredBills: [
-                    "S. 64 — Rural Broadband Expansion Act",
+                    LegislationRef(title: "S. 64 — Rural Broadband Expansion Act"),
                 ],
                 funders: [
                     Funder(name: "Small Business Coalition", amount: 521_000, category: "Business"),
@@ -149,11 +149,11 @@ enum SampleData {
                     VoteRecord(billTitle: "H.R. 305 — Small Business Relief & Fairness Act", position: .notVoting, date: daysAgo(3)),
                 ],
                 sponsoredBills: [
-                    "H.R. 77 — Digital Privacy Protection Act",
+                    LegislationRef(title: "H.R. 77 — Digital Privacy Protection Act"),
                 ],
                 cosponsoredBills: [
-                    "H.R. 1842 — Clean Energy Innovation Act",
-                    "S. 64 — Rural Broadband Expansion Act",
+                    LegislationRef(title: "H.R. 1842 — Clean Energy Innovation Act"),
+                    LegislationRef(title: "S. 64 — Rural Broadband Expansion Act"),
                 ],
                 funders: [
                     Funder(name: "Digital Rights Network", amount: 96_400, category: "Technology"),

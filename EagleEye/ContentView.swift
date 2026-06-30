@@ -64,6 +64,9 @@ struct ContentView: View {
                 DistrictMapView(representatives: SampleData.representatives)
             }
         }
+        // Make the user's delegation available to bill detail screens so each
+        // roll-call tally can surface their representatives' votes on top.
+        .environment(\.userRepBioguideIDs, Set(store.representatives.compactMap(\.bioguideID)))
     }
 
     /// Asks for the user's location, then loads their delegation. Falls back to

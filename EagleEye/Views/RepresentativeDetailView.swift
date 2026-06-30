@@ -86,12 +86,20 @@ struct RepresentativeDetailView: View {
         ProfileSection(title: "Voting History", systemImage: "checklist") {
             if representative.keyVotes.isEmpty {
                 EmptyNote("No recent votes on record.")
-            } else {
-                VStack(spacing: 12) {
-                    ForEach(representative.keyVotes, id: \.self) { vote in
-                        VoteRow(vote: vote)
-                    }
+            } else if representative.keyVotes.count > 3 {
+                Collapsible(collapsedHeight: 160, accessibilityNoun: "votes") {
+                    voteRows
                 }
+            } else {
+                voteRows
+            }
+        }
+    }
+
+    private var voteRows: some View {
+        VStack(spacing: 12) {
+            ForEach(representative.keyVotes, id: \.self) { vote in
+                VoteRow(vote: vote)
             }
         }
     }
@@ -146,9 +154,7 @@ private struct EmptyNote: View {
 /// overflow under a gradient with a chevron to expand or collapse it.
 private struct BillGroup: View {
     let title: String
-    let bills: [String]
-
-    @State private var isExpanded = false
+    let bills: [LegislationRef]
 
     /// Height of the collapsed list — enough to show a few bills before fading.
     private let collapsedHeight: CGFloat = 132
@@ -164,7 +170,9 @@ private struct BillGroup: View {
             if bills.isEmpty {
                 EmptyNote("None.")
             } else if isCollapsible {
-                collapsibleList
+                Collapsible(collapsedHeight: collapsedHeight, accessibilityNoun: "\(title.lowercased()) bills") {
+                    billRows
+                }
             } else {
                 billRows
             }
@@ -173,24 +181,60 @@ private struct BillGroup: View {
 
     private var billRows: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ForEach(bills, id: \.self) { bill in
-                Label(bill, systemImage: "checkmark.seal")
-                    .font(.body)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            ForEach(bills) { bill in
+                billRow(bill)
             }
         }
     }
 
-    private var collapsibleList: some View {
+    /// A single bill. When the reference carries identifiers, the whole row is a
+    /// link to the bill's detail screen with a trailing chevron; otherwise (e.g.
+    /// sample data) it's a plain label.
+    @ViewBuilder
+    private func billRow(_ bill: LegislationRef) -> some View {
+        if bill.isNavigable {
+            NavigationLink(value: bill) {
+                HStack(spacing: 8) {
+                    label(for: bill)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.bold())
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .buttonStyle(.plain)
+        } else {
+            label(for: bill)
+        }
+    }
+
+    private func label(for bill: LegislationRef) -> some View {
+        Label(bill.displayTitle, systemImage: "checkmark.seal")
+            .font(.body)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Wraps a tall list so it collapses to a few rows behind a fading edge, with a
+/// chevron to expand or collapse. Shared by the bills and voting-history
+/// sections so they animate and look identical.
+private struct Collapsible<Content: View>: View {
+    let collapsedHeight: CGFloat
+    /// Plural noun used in the expand/collapse accessibility label, e.g. "votes".
+    let accessibilityNoun: String
+    @ViewBuilder let content: () -> Content
+
+    @State private var isExpanded = false
+
+    var body: some View {
         VStack(spacing: 0) {
             if isExpanded {
-                billRows
+                content()
                 expandButton
                     .padding(.top, 10)
             } else {
                 ZStack(alignment: .bottom) {
-                    billRows
+                    content()
                         .frame(maxHeight: collapsedHeight, alignment: .top)
                         .clipped()
                         .mask(fadeMask)
@@ -201,7 +245,7 @@ private struct BillGroup: View {
         }
     }
 
-    /// Fades the bottom of the collapsed list out so the cut-off bill trails
+    /// Fades the bottom of the collapsed content out so the cut-off row trails
     /// off rather than ending abruptly.
     private var fadeMask: LinearGradient {
         LinearGradient(
@@ -227,7 +271,7 @@ private struct BillGroup: View {
                 .overlay(Circle().strokeBorder(.quaternary, lineWidth: 0.5))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(isExpanded ? "Show fewer \(title.lowercased()) bills" : "Show all \(title.lowercased()) bills")
+        .accessibilityLabel(isExpanded ? "Show fewer \(accessibilityNoun)" : "Show all \(accessibilityNoun)")
     }
 }
 
@@ -238,6 +282,7 @@ private struct VoteRow: View {
         switch vote.position {
         case .yea: .green
         case .nay: .red
+        case .present: .orange
         case .notVoting: .secondary
         }
     }
@@ -247,7 +292,8 @@ private struct VoteRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(vote.billTitle)
                     .font(.subheadline)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
                 Text(vote.date, format: .dateTime.month().day().year())
                     .font(.caption)
                     .foregroundStyle(.secondary)

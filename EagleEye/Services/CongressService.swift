@@ -151,12 +151,12 @@ struct CongressService {
     func enrichedProfile(for representative: Representative, limit: Int = 20) async -> Representative {
         guard let bioguideID = representative.bioguideID else { return representative }
 
-        async let sponsored = legislationTitles(
+        async let sponsored = legislation(
             SponsoredLegislationResponse.self,
             path: "member/\(bioguideID)/sponsored-legislation",
             limit: limit
         )
-        async let cosponsored = legislationTitles(
+        async let cosponsored = legislation(
             CosponsoredLegislationResponse.self,
             path: "member/\(bioguideID)/cosponsored-legislation",
             limit: limit
@@ -170,7 +170,10 @@ struct CongressService {
 
     // MARK: - Voting history
 
-    /// Returns the member's most recent House floor votes, newest first.
+    /// Returns the member's most recent *significant* House floor votes, newest
+    /// first — final passage of a bill or resolution, not the procedural motions
+    /// (previous question, motions to recommit, amendments) that make up the
+    /// bulk of roll calls.
     ///
     /// The Congress.gov roll-call vote endpoints cover the House of
     /// Representatives only (from the 118th Congress onward), so senators and
@@ -181,13 +184,16 @@ struct CongressService {
             return []
         }
 
-        let recentVotes = await recentHouseVotes(limit: limit)
-        guard !recentVotes.isEmpty else { return [] }
+        // Scan a generous window of recent roll calls — most are procedural —
+        // and keep only the significant ones, up to `limit`.
+        let candidates = await recentHouseVotes(limit: Self.voteScanWindow)
+        let significant = await significantVotes(among: candidates, limit: limit)
+        guard !significant.isEmpty else { return [] }
 
-        // Look up this member's position on each vote concurrently, restoring
-        // the newest-first ordering afterward.
+        // Look up this member's position on each kept vote concurrently,
+        // restoring the newest-first ordering afterward.
         return await withTaskGroup(of: (Int, VoteRecord?).self) { group in
-            for (index, vote) in recentVotes.enumerated() {
+            for (index, vote) in significant.enumerated() {
                 group.addTask { (index, await self.voteRecord(for: bioguideID, on: vote)) }
             }
             var collected: [(Int, VoteRecord)] = []
@@ -197,6 +203,11 @@ struct CongressService {
             return collected.sorted { $0.0 < $1.0 }.map(\.1)
         }
     }
+
+    /// How many recent roll calls to inspect when looking for significant votes.
+    /// Wide enough that the procedural majority still leaves plenty of passage
+    /// votes to choose from.
+    private static let voteScanWindow = 40
 
     /// Fetches the most recent House roll-call votes of the current Congress,
     /// newest first. Both sessions are pulled and merged because the list
@@ -223,38 +234,118 @@ struct CongressService {
         return response?.houseRollCallVotes ?? []
     }
 
+    /// Fetches each candidate's lightweight detail (which carries the vote's
+    /// question) concurrently, keeps only the significant votes, and returns the
+    /// newest `limit` of them. The detail endpoint is tiny next to the full
+    /// member roster, so classifying here avoids pulling rosters we'd discard.
+    private func significantVotes(among candidates: [HouseVoteDTO], limit: Int) async -> [HouseVoteDetail] {
+        let details = await withTaskGroup(of: HouseVoteDetail?.self) { group in
+            for vote in candidates {
+                group.addTask { await self.voteDetail(for: vote) }
+            }
+            var collected: [HouseVoteDetail] = []
+            for await detail in group {
+                if let detail { collected.append(detail) }
+            }
+            return collected
+        }
+
+        return details
+            .filter { Self.isSignificant(question: $0.voteQuestion) }
+            // Require a numbered measure: a passage vote the API hasn't linked to
+            // legislation has no bill name to show, so the row would fall back to
+            // a bare procedural question — exactly the noise we're filtering out.
+            .filter { $0.legislationType?.isEmpty == false && $0.legislationNumber?.isEmpty == false }
+            .sorted { ($0.startDate ?? "") > ($1.startDate ?? "") }
+            .prefix(limit)
+            .map { $0 }
+    }
+
+    /// Loads a single roll call's detail (question, legislation, date), without
+    /// the full member roster. Returns nil on any failure.
+    private func voteDetail(for vote: HouseVoteDTO) async -> HouseVoteDetail? {
+        guard let session = vote.sessionNumber, let number = vote.rollCallNumber else {
+            return nil
+        }
+        let response = try? await getJSON(
+            HouseVoteDetailResponse.self,
+            path: "house-vote/\(Self.currentCongress)/\(session)/\(number)"
+        )
+        return response?.houseRollCallVote
+    }
+
     /// Looks up how a member voted on a single roll call, returning nil when the
-    /// member wasn't recorded on it or the lookup fails. The member-level
-    /// endpoint carries the vote's question, legislation, and date alongside
-    /// each member's position, so one request yields a complete record.
-    private func voteRecord(for bioguideID: String, on vote: HouseVoteDTO) async -> VoteRecord? {
-        guard let session = vote.sessionNumber, let number = vote.rollCallNumber,
-              let response = try? await getJSON(
-                HouseVoteMembersResponse.self,
-                path: "house-vote/\(Self.currentCongress)/\(session)/\(number)/members"
-              ) else {
+    /// member wasn't recorded on it or the lookup fails. The member roster and
+    /// the bill's title are fetched concurrently so each row can show the bill's
+    /// name rather than the procedural question.
+    private func voteRecord(for bioguideID: String, on vote: HouseVoteDetail) async -> VoteRecord? {
+        guard let session = vote.sessionNumber, let number = vote.rollCallNumber else {
             return nil
         }
 
-        let detail = response.houseRollCallVoteMemberVotes
-        guard let member = detail.results.first(where: { $0.bioguideID == bioguideID }) else {
+        async let roster = memberRoster(session: session, rollCall: number)
+        async let billName = billName(type: vote.legislationType, number: vote.legislationNumber)
+
+        // Skip the vote unless we have both the member's position and a bill name
+        // to show — a nameless row would just read as a procedural question.
+        guard let member = (await roster)?.first(where: { $0.bioguideID == bioguideID }),
+              let name = await billName else {
             return nil
         }
 
         return VoteRecord(
-            billTitle: Self.voteTitle(for: detail),
+            billTitle: Bill.displayTitle(type: vote.legislationType, number: vote.legislationNumber, title: name),
             position: Self.position(fromCast: member.voteCast),
-            date: Self.parseVoteDate(detail.startDate) ?? Date()
+            date: Self.parseVoteDate(vote.startDate) ?? Date(),
+            question: Self.question(for: vote)
         )
     }
 
-    /// Builds a readable label for a vote from its question and the legislation
-    /// it concerned, e.g. "On Passage — H.R. 3424". Falls back to the question
-    /// alone for procedural votes not tied to a numbered bill.
-    private static func voteTitle(for vote: HouseVoteMemberVotes) -> String {
+    /// Fetches how every member was recorded on a roll call. Returns nil on
+    /// failure.
+    private func memberRoster(session: Int, rollCall: Int) async -> [MemberVoteDTO]? {
+        let response = try? await getJSON(
+            HouseVoteMembersResponse.self,
+            path: "house-vote/\(Self.currentCongress)/\(session)/\(rollCall)/members"
+        )
+        return response?.houseRollCallVoteMemberVotes.results
+    }
+
+    /// Fetches the title of a numbered bill or resolution. Returns nil for votes
+    /// not tied to a numbered measure, or on any failure.
+    private func billName(type: String?, number: String?) async -> String? {
+        guard let type, let number, !number.isEmpty else { return nil }
+        let response = try? await getJSON(
+            BillDetailResponse.self,
+            path: "bill/\(Self.currentCongress)/\(type.lowercased())/\(number)"
+        )
+        guard let title = response?.bill.title, !title.isEmpty else { return nil }
+        return title
+    }
+
+    /// Whether a roll call decides the fate of the underlying bill or resolution
+    /// — final passage, agreeing to a resolution or conference report, or
+    /// concurring in a Senate amendment — rather than a procedural step (the
+    /// previous question, a motion to recommit, an amendment, a motion to table).
+    private static func isSignificant(question: String?) -> Bool {
+        guard let question = question?.lowercased() else { return false }
+        let passageMarkers = [
+            "on passage",
+            "suspend the rules and pass",
+            "suspend the rules and agree",
+            "agreeing to the resolution",
+            "agreeing to the conference report",
+            // Concurring in a Senate amendment clears a bill for the President;
+            // matched loosely since the API abbreviates "Amendment" as "Adt".
+            "concur",
+        ]
+        return passageMarkers.contains { question.contains($0) }
+    }
+
+    /// The specific floor question put to a vote, e.g. "On Passage".
+    private static func question(for vote: HouseVoteDetail) -> String {
         let question = vote.voteQuestion?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let base = (question?.isEmpty == false) ? question! : "Roll call vote"
-        return Bill.displayTitle(type: vote.legislationType, number: vote.legislationNumber, title: base)
+        return (question?.isEmpty == false) ? question! : "Roll call vote"
     }
 
     /// Maps the House clerk's recorded vote ("Yea"/"Aye", "Nay"/"No", "Present",
@@ -263,7 +354,18 @@ struct CongressService {
         switch cast?.lowercased() {
         case "yea", "aye", "yes": .yea
         case "nay", "no": .nay
+        case "present": .present
         default: .notVoting
+        }
+    }
+
+    /// Maps the single-letter party code the vote roster uses ("D"/"R"/"I") onto
+    /// the app's party model.
+    private static func party(fromCode code: String?) -> Party {
+        switch code?.uppercased() {
+        case "D": .democrat
+        case "R": .republican
+        default: .independent
         }
     }
 
@@ -274,13 +376,14 @@ struct CongressService {
         return voteDateFormatter.date(from: string)
     }
 
-    /// Loads a member's sponsored or cosponsored legislation and formats each
-    /// entry into its familiar short name. Returns an empty list on failure.
-    private func legislationTitles<T: LegislationListResponse>(
+    /// Loads a member's sponsored or cosponsored legislation as references that
+    /// carry the identifiers needed to open each bill's detail screen. Returns an
+    /// empty list on failure.
+    private func legislation<T: LegislationListResponse>(
         _ type: T.Type,
         path: String,
         limit: Int
-    ) async -> [String] {
+    ) async -> [LegislationRef] {
         guard let response = try? await getJSON(
             type,
             path: path,
@@ -290,8 +393,100 @@ struct CongressService {
         }
         return response.items.compactMap { item in
             guard let title = item.title, !title.isEmpty else { return nil }
-            return Bill.displayTitle(type: item.type, number: item.number, title: title)
+            return LegislationRef(
+                congress: item.congress,
+                type: item.type,
+                number: item.number,
+                title: title
+            )
         }
+    }
+
+    /// Loads the full detail for a referenced bill — its plain-language summary,
+    /// policy area, status, and latest action — for the profile's bill detail
+    /// screen. Returns nil for references without identifiers (e.g. sample data)
+    /// or on any failure.
+    func billDetail(for reference: LegislationRef) async -> Bill? {
+        guard let congress = reference.congress,
+              let type = reference.type, !type.isEmpty,
+              let number = reference.number, !number.isEmpty else {
+            return nil
+        }
+
+        let path = "bill/\(congress)/\(type.lowercased())/\(number)"
+        guard let response = try? await getJSON(SingleBillResponse.self, path: path),
+              let base = Bill(dto: response.bill) else {
+            return nil
+        }
+
+        async let summary = latestSummaryText(path: path)
+        async let policyArea = policyAreaName(path: path)
+
+        return base.withDetails(
+            summary: (await summary).map { Self.cleanedSummary($0, title: response.bill.title) },
+            topics: (await policyArea).map { [$0] } ?? []
+        )
+    }
+
+    // MARK: - Bill roll-call tally
+
+    /// Fetches the roll-call breakdown for a bill's most recent House vote: how
+    /// every member voted, plus the question and outcome. Returns nil for bills
+    /// with no House roll call (e.g. still in committee, or a Senate vote, which
+    /// Congress.gov doesn't expose member-by-member) or on any failure.
+    func billVoteTally(congress: Int, type: String, number: String) async -> BillVoteTally? {
+        // The bill's recorded votes live on its actions, each carrying a roll-call
+        // number we can resolve to a full member roster.
+        guard let actions = try? await getJSON(
+            BillActionsResponse.self,
+            path: "bill/\(congress)/\(type.lowercased())/\(number)/actions",
+            queryItems: [URLQueryItem(name: "limit", value: "250")]
+        ) else {
+            return nil
+        }
+
+        let houseVotes = actions.actions
+            .compactMap(\.recordedVotes)
+            .flatMap { $0 }
+            .filter { ($0.chamber ?? "").localizedCaseInsensitiveContains("house") }
+
+        // Surface the most recent House roll call — typically final passage or the
+        // bill's last floor disposition.
+        guard let latest = houseVotes.max(by: { ($0.date ?? "") < ($1.date ?? "") }),
+              let session = latest.sessionNumber,
+              let roll = latest.rollNumber else {
+            return nil
+        }
+
+        let voteCongress = latest.congress ?? congress
+        guard let response = try? await getJSON(
+            HouseVoteMembersResponse.self,
+            path: "house-vote/\(voteCongress)/\(session)/\(roll)/members"
+        ) else {
+            return nil
+        }
+
+        let payload = response.houseRollCallVoteMemberVotes
+        let members = payload.results.map { dto -> MemberVote in
+            let name = [dto.firstName, dto.lastName]
+                .compactMap { $0 }
+                .joined(separator: " ")
+            return MemberVote(
+                id: dto.bioguideID,
+                name: name.isEmpty ? dto.bioguideID : name,
+                party: Self.party(fromCode: dto.voteParty),
+                state: dto.voteState ?? "",
+                position: Self.position(fromCast: dto.voteCast)
+            )
+        }
+        guard !members.isEmpty else { return nil }
+
+        return BillVoteTally(
+            question: payload.voteQuestion,
+            date: Self.parseVoteDate(payload.startDate),
+            result: payload.result,
+            memberVotes: members
+        )
     }
 
     /// Fetches the bills most recently acted on in the current Congress, newest
@@ -603,6 +798,7 @@ private struct CosponsoredLegislationResponse: LegislationListResponse {
 }
 
 private struct LegislationDTO: Decodable {
+    let congress: Int?
     let type: String?
     let number: String?
     let title: String?
@@ -612,6 +808,29 @@ private struct LegislationDTO: Decodable {
 
 private struct BillListResponse: Decodable {
     let bills: [BillDTO]
+}
+
+/// The bill detail endpoint's single-bill payload, shaped like a list entry.
+private struct SingleBillResponse: Decodable {
+    let bill: BillDTO
+}
+
+/// The bill actions endpoint, whose entries carry the roll-call votes taken on
+/// the bill.
+private struct BillActionsResponse: Decodable {
+    let actions: [Action]
+
+    struct Action: Decodable {
+        let recordedVotes: [RecordedVote]?
+    }
+
+    struct RecordedVote: Decodable {
+        let chamber: String?
+        let congress: Int?
+        let date: String?
+        let rollNumber: Int?
+        let sessionNumber: Int?
+    }
 }
 
 struct BillDTO: Decodable {
@@ -635,29 +854,48 @@ private struct HouseVoteListResponse: Decodable {
 }
 
 /// One entry from the roll-call vote list endpoint. Only the fields needed to
-/// order the votes and address each member-level lookup are decoded.
+/// order the votes and address each detail lookup are decoded.
 private struct HouseVoteDTO: Decodable {
     let rollCallNumber: Int?
     let sessionNumber: Int?
     let startDate: String?
 }
 
+private struct HouseVoteDetailResponse: Decodable {
+    let houseRollCallVote: HouseVoteDetail
+}
+
+/// A single roll call's detail: the question asked, the legislation it
+/// concerned, and when it was taken — everything needed to label and classify
+/// the vote, without the full member roster.
+private struct HouseVoteDetail: Decodable {
+    let rollCallNumber: Int?
+    let sessionNumber: Int?
+    let startDate: String?
+    let voteQuestion: String?
+    let legislationType: String?
+    let legislationNumber: String?
+}
+
 private struct HouseVoteMembersResponse: Decodable {
     let houseRollCallVoteMemberVotes: HouseVoteMemberVotes
 }
 
-/// The member-level vote payload: the vote's question, legislation, and date,
-/// plus how every House member was recorded.
+/// The member-level vote payload: how every House member was recorded, plus the
+/// question and outcome that label the tally.
 private struct HouseVoteMemberVotes: Decodable {
-    let voteQuestion: String?
-    let legislationType: String?
-    let legislationNumber: String?
-    let startDate: String?
     let results: [MemberVoteDTO]
+    let voteQuestion: String?
+    let result: String?
+    let startDate: String?
 }
 
 private struct MemberVoteDTO: Decodable {
     let bioguideID: String
+    let firstName: String?
+    let lastName: String?
+    let voteParty: String?
+    let voteState: String?
     let voteCast: String?
 }
 
@@ -674,6 +912,7 @@ private struct BillDetailResponse: Decodable {
     let bill: BillDetail
 
     struct BillDetail: Decodable {
+        let title: String?
         let policyArea: PolicyArea?
 
         struct PolicyArea: Decodable {
@@ -701,7 +940,10 @@ extension Bill {
             chamber: chamber,
             status: Self.status(fromAction: actionText),
             latestActionDate: Self.parseDate(dto.latestAction?.actionDate) ?? Date(),
-            topics: []
+            topics: [],
+            congress: dto.congress,
+            billType: dto.type,
+            billNumber: dto.number
         )
     }
 
@@ -716,7 +958,10 @@ extension Bill {
             chamber: chamber,
             status: status,
             latestActionDate: latestActionDate,
-            topics: topics
+            topics: topics,
+            congress: congress,
+            billType: billType,
+            billNumber: billNumber
         )
     }
 

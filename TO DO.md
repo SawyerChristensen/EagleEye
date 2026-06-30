@@ -1,46 +1,63 @@
 # Project Roadmap
 ---
 
+## ✅ 0.1 — Foundation (Done)
+
 - [x] Initial UI mockups and project architecture
 - [x] Implement representative lookup by user location
-- [x] Make the home feed pull real data via Congress API
-  - [x] Summarize each bill 
+- [x] Home feed pulls real data via Congress API
+  - [x] Summarize each bill
     - [x] Position "H.R. {number}" at end of title, one smaller font size
-    - [x] Remove title and "This bill" from sumarries
-  - [ ] Rank each bill based on how far it got (introduced)/(committee)/(congress)/(presidents desk)/(signed into law) most important information should be on top. there should be an importance trait that decays with time
-- [ ] Populate the representatives profile with data in the defined sections
-  - [x] Committees
-  - [x] Bills
-  - [ ] Voting History
-    - [ ] House Representatives
-      - [ ] Summarize votes, (discard in-committee ones)
-      - [ ] Use same collapsable view that the bills use
-    - [ ] For Senators (need senate.gov API)
-  - [ ] Top Funders
-  - [ ] Add office contact information in representatives profile
-    - [ ] Link to their social media?
-  - [ ] Add statistic on how good they are at beating the market/"insider trading/corruption" meter?
-- [ ] Integrate ProPublica API for voting records and sponsored bills? Is this needed?
-- [ ] Integrate OpenFEC API for campaign finance data visualizations
-- [ ] Build the interactive map view (evaluate performance and utility) (fill with party color, representative icon in the middle)
-  - [ ] Zoom out to state level to see governor + senator
-- [ ] Implement local caching for offline viewing
+    - [x] Remove title and "This bill" from summaries
+- [x] Populate representative profile: Committees
+- [x] Populate representative profile: Bills (sponsored & cosponsored)
+- [x] Voting History — House Representatives: summarize votes, discard in-committee ones
+
+---
+
+## 0.2 — Feed & Profile Polish *(no new data sources)*
+
+- [x] Rank each bill by how far it got (introduced → committee → passed → president's desk → enacted); importance trait decays with time so the most important, active bills surface on top
+- [x] Each profile bill has a right arrow that opens the expanded bill detail screen
+- [x] Voting History uses the same collapsible/fade view that the bills sections use
+- [x] Add the roll-call tally to each bill's detail screen — who voted and which way — with the user's representatives surfaced on top
+- [ ] Each bill should have the HR code next to the "Bill" title on top in the center of the screen, right of the arrow, and not in the main title in the feed
+- [ ] Center the heading/title abvo
+- [ ] **QOL:** Skip the location loading screen when we already have the user's location
+- [ ] **Bug:** Apple's location is sometimes vague (for privacy) and returns the wrong representative — let the user type in a ZIP code manually as a fallback (or as an option before we even ask for location)
+
+---
+
+## 0.3 — Richer Representative Data *(requires new external sources)*
+
+- [ ] Voting History for Senators *(needs senate.gov API — Congress.gov roll calls are House-only)*
+- [ ] Office contact information in the profile
+  - [ ] Link to their social media
+- [ ] Top Funders *(OpenFEC API)*
+- [ ] "Beats the market" / insider-trading / corruption meter *(needs a trading-disclosure data source)*
+- [ ] Evaluate ProPublica API for voting records and sponsored bills — is it needed on top of Congress.gov?
+
+---
+
+## 0.4 — Interactive Map
+
+- [ ] Build the interactive map view (evaluate performance and utility): fill districts with party color, representative icon in the middle
+  - [ ] Zoom out to state level to see governor + senators
+
+---
+
+## 0.5 — Platform & Reach
+
+- [ ] Implement local caching for offline viewing *(partially done: bills and delegation are cached on disk)*
 - [ ] Localization framework setup for multi-language support (Spanish, French, etc.)
 
+---
 
 ## Version 1.0
 #### Release!
 
----
 
-## 🛑 Known Issues & Critical Bugs
 
-- [ ] Sometimes Apple's location is vague (for user privacy) and gives the wrong representative (type in zip code manually?)
----
-
-## 🧠 Quality of Life (QOL) & UX Polish
-
-- [ ] Skip the location loading screen if we already have the users location
 ---
 
 ## ⚙️ Refactoring & Code Optimization

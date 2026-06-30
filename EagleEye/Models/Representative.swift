@@ -28,14 +28,61 @@ enum Office: String, Codable {
 enum VotePosition: String, Codable {
     case yea = "Yea"
     case nay = "Nay"
+    case present = "Present"
     case notVoting = "Did Not Vote"
 }
 
 /// A single recorded vote, used on the member's profile.
 struct VoteRecord: Codable, Hashable {
+    /// Display name of the legislation voted on, e.g.
+    /// "Clean Energy Innovation Act — H.R. 1842".
     let billTitle: String
     let position: VotePosition
     let date: Date
+    /// The specific floor question, e.g. "On Passage" — surfaced when a vote is
+    /// tapped for detail. `nil` for placeholder sample data.
+    let question: String?
+
+    init(billTitle: String, position: VotePosition, date: Date, question: String? = nil) {
+        self.billTitle = billTitle
+        self.position = position
+        self.date = date
+        self.question = question
+    }
+}
+
+/// A reference to a piece of legislation a member sponsored or cosponsored.
+/// Carries the identifiers needed to open the bill's detail screen, not just a
+/// display string, so each row in the profile can navigate to the full bill.
+struct LegislationRef: Codable, Hashable, Identifiable {
+    let id: UUID
+    /// The Congress the measure belongs to, e.g. 119.
+    let congress: Int?
+    /// The measure type code, e.g. "HR", "S", "HRES".
+    let type: String?
+    /// The measure number as a string, e.g. "1842".
+    let number: String?
+    /// The official title, without the "— H.R. 1234" suffix.
+    let title: String
+
+    /// The familiar short name shown in the UI, e.g. "Clean Water Act — H.R. 1234".
+    var displayTitle: String {
+        Bill.displayTitle(type: type, number: number, title: title)
+    }
+
+    /// Whether enough identifiers are present to load the bill's detail screen.
+    /// Sample data carries only a title, so those rows render without a chevron.
+    var isNavigable: Bool {
+        congress != nil && type?.isEmpty == false && number?.isEmpty == false
+    }
+
+    init(id: UUID = UUID(), congress: Int? = nil, type: String? = nil, number: String? = nil, title: String) {
+        self.id = id
+        self.congress = congress
+        self.type = type
+        self.number = number
+        self.title = title
+    }
 }
 
 /// A source of campaign funding, used on the member's profile.
@@ -72,10 +119,10 @@ struct Representative: Identifiable, Codable, Hashable {
     let committees: [String]
     /// A sampling of notable votes (placeholder until a votes API is wired up).
     let keyVotes: [VoteRecord]
-    /// Titles of bills the member sponsored.
-    let sponsoredBills: [String]
-    /// Titles of bills the member cosponsored.
-    let cosponsoredBills: [String]
+    /// Bills the member sponsored.
+    let sponsoredBills: [LegislationRef]
+    /// Bills the member cosponsored.
+    let cosponsoredBills: [LegislationRef]
     /// Top campaign funders (placeholder until a finance API is wired up).
     let funders: [Funder]
 
@@ -86,7 +133,7 @@ struct Representative: Identifiable, Codable, Hashable {
     /// Returns a copy with the sponsored and cosponsored bill lists replaced,
     /// used to fill in those profile sections after the member's legislation is
     /// loaded from Congress.gov.
-    func withBills(sponsored: [String], cosponsored: [String]) -> Representative {
+    func withBills(sponsored: [LegislationRef], cosponsored: [LegislationRef]) -> Representative {
         Representative(
             id: id,
             name: name,
@@ -191,8 +238,8 @@ struct Representative: Identifiable, Codable, Hashable {
         tenureStart: Date = Date(),
         committees: [String] = [],
         keyVotes: [VoteRecord] = [],
-        sponsoredBills: [String] = [],
-        cosponsoredBills: [String] = [],
+        sponsoredBills: [LegislationRef] = [],
+        cosponsoredBills: [LegislationRef] = [],
         funders: [Funder] = []
     ) {
         self.id = id
