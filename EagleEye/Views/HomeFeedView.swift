@@ -113,19 +113,22 @@ private struct TopicPillStrip: View {
         // gives the strip a tiny minimum width. The real pills live in an
         // overlay so their width never forces the row wider or squashes the
         // status badge — anything past the trailing edge is clipped and faded.
+        // The font/padding here must match the pills below, otherwise the mask
+        // is shorter than the pills and clips them vertically.
         Text(" ")
-            .font(.caption2)
-            .padding(.vertical, 3)
+            .font(.caption)
+            .padding(.vertical, 5)
             .hidden()
             .frame(maxWidth: .infinity, alignment: .leading)
             .overlay(alignment: .leading) {
                 HStack(spacing: 6) {
                     ForEach(topics, id: \.self) { topic in
                         Text(topic)
-                            .font(.caption2)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(.quaternary, in: .capsule)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(.secondary.opacity(0.1), in: .capsule)
                             .fixedSize()
                     }
                 }
@@ -150,23 +153,43 @@ struct StatusBadge: View {
     let status: BillStatus
     let chamber: Chamber
 
-    private var color: Color {
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// A brighter blue in dark mode, where the stock system blue reads too dark
+    /// against the near-black feed background.
+    private var blue: Color {
+        colorScheme == .dark ? Color(red: 0.40, green: 0.66, blue: 1.0) : .blue
+    }
+
+    private var foregroundColor: Color {
         switch status.tint {
-        case "blue": .blue
+        case "blue": blue
         case "green": .green
         default: .secondary
         }
     }
 
+    private var backgroundColor: Color {
+        switch status.tint {
+        case "blue": blue.opacity(colorScheme == .dark ? 0.18 : 0.1)
+        case "green": .green.opacity(0.1)
+        // Distinct gray for the fallback; systemGray5 reads too bright in dark
+        // mode, so drop to the darker systemGray6 there.
+        default: colorScheme == .dark ? Color(.systemGray6) : Color(.systemGray5)
+        }
+    }
+
     var body: some View {
-        Label(status.displayLabel(chamber: chamber), systemImage: chamber.symbolName)
-            .font(.caption.weight(.semibold))
-            .lineLimit(1)
-            .fixedSize()
-            .foregroundStyle(color)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(color.opacity(0.15), in: .capsule)
+        HStack(spacing: 6) {
+            Image(systemName: chamber.symbolName)
+            Text(status.displayLabel(chamber: chamber))
+        }
+        .font(.caption.weight(.semibold))
+        .lineLimit(1)
+        .foregroundStyle(foregroundColor)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(backgroundColor, in: .capsule)
     }
 }
 

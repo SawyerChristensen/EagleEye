@@ -109,7 +109,7 @@ struct RepresentativePortrait: View {
     var body: some View {
         Group {
             if let url = representative.portraitURL {
-                AsyncImage(url: url) { image in
+                CachedAsyncImage(url: url) { image in
                     image
                         .resizable()
                         .scaledToFill()

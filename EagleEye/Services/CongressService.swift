@@ -434,11 +434,12 @@ struct CongressService {
 
     // MARK: - Bill roll-call tally
 
-    /// Fetches the roll-call breakdown for a bill's most recent House vote: how
-    /// every member voted, plus the question and outcome. Returns nil for bills
-    /// with no House roll call (e.g. still in committee, or a Senate vote, which
-    /// Congress.gov doesn't expose member-by-member) or on any failure.
-    func billVoteTally(congress: Int, type: String, number: String) async -> BillVoteTally? {
+    /// Looks up a bill's House vote. Resolves the most recent House roll call to
+    /// a full member roster when one exists; otherwise reports that the bill
+    /// cleared the floor without a roll call — naming the method (voice vote,
+    /// unanimous consent) when the action text says so — or that no vote was
+    /// found at all.
+    func billVote(congress: Int, type: String, number: String) async -> BillVoteOutcome {
         // The bill's recorded votes live on its actions, each carrying a roll-call
         // number we can resolve to a full member roster.
         guard let actions = try? await getJSON(
@@ -446,7 +447,7 @@ struct CongressService {
             path: "bill/\(congress)/\(type.lowercased())/\(number)/actions",
             queryItems: [URLQueryItem(name: "limit", value: "250")]
         ) else {
-            return nil
+            return .unavailable
         }
 
         let houseVotes = actions.actions
@@ -454,18 +455,27 @@ struct CongressService {
             .flatMap { $0 }
             .filter { ($0.chamber ?? "").localizedCaseInsensitiveContains("house") }
 
-        // Surface the most recent House roll call — typically final passage or the
-        // bill's last floor disposition.
-        guard let latest = houseVotes.max(by: { ($0.date ?? "") < ($1.date ?? "") }),
-              let session = latest.sessionNumber,
-              let roll = latest.rollNumber else {
-            return nil
+        // Prefer the most recent House roll call — typically final passage or the
+        // bill's last floor disposition — resolved to its full roster.
+        if let latest = houseVotes.max(by: { ($0.date ?? "") < ($1.date ?? "") }),
+           let session = latest.sessionNumber,
+           let roll = latest.rollNumber,
+           let tally = await memberTally(
+               congress: latest.congress ?? congress, session: session, roll: roll
+           ) {
+            return .recorded(tally)
         }
 
-        let voteCongress = latest.congress ?? congress
+        // No roll call to show — say how the bill passed, if the record says.
+        return .unrecorded(method: Self.passageMethod(fromActions: actions.actions))
+    }
+
+    /// Resolves a House roll call to its full member roster and summary. Returns
+    /// nil on any failure or when the roster comes back empty.
+    private func memberTally(congress: Int, session: Int, roll: Int) async -> BillVoteTally? {
         guard let response = try? await getJSON(
             HouseVoteMembersResponse.self,
-            path: "house-vote/\(voteCongress)/\(session)/\(roll)/members"
+            path: "house-vote/\(congress)/\(session)/\(roll)/members"
         ) else {
             return nil
         }
@@ -491,6 +501,28 @@ struct CongressService {
             result: payload.result,
             memberVotes: members
         )
+    }
+
+    /// Reads how a bill cleared the floor from its action text, for bills that
+    /// passed without a roll call. The clerk phrases these as "…Agreed to by
+    /// voice vote" or "…by Unanimous Consent" / "without objection". Only
+    /// actions that record the measure itself passing are considered, so a
+    /// procedural voice vote on an amendment along the way isn't mistaken for
+    /// the bill's own passage.
+    private static func passageMethod(
+        fromActions actions: [BillActionsResponse.Action]
+    ) -> PassageMethod? {
+        for action in actions {
+            let text = (action.text ?? "").lowercased()
+            guard text.contains("pass") || text.contains("agreed to") else { continue }
+            if text.contains("unanimous consent") || text.contains("without objection") {
+                return .unanimousConsent
+            }
+            if text.contains("voice vote") {
+                return .voiceVote
+            }
+        }
+        return nil
     }
 
     /// Fetches the bills most recently acted on in the current Congress, newest
@@ -785,11 +817,35 @@ struct CongressService {
         // Collapse horizontal whitespace, tidy the space around the line
         // breaks we inserted, then squeeze runs of blank lines down to a
         // single paragraph break.
-        return text
+        let normalized = text
             .replacingOccurrences(of: "[^\\S\\n]+", with: " ", options: .regularExpression)
             .replacingOccurrences(of: " *\\n *", with: "\n", options: .regularExpression)
             .replacingOccurrences(of: "\\n{2,}", with: "\n\n", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return rejoiningSplitSentences(normalized)
+    }
+
+    /// Folds back paragraph breaks that the block-tag conversion introduced
+    /// mid-sentence. CRS summaries often enumerate a provision as a lead-in
+    /// clause followed by `<li>`/`<p>` items — "…the task force must" /
+    /// "coordinate with…" / "develop…" — which turns the lead-in into a
+    /// paragraph with no terminal punctuation followed by lowercase-leading
+    /// fragments. A break like that isn't a real paragraph, so merge each
+    /// lowercase-leading paragraph into the previous one whenever that one
+    /// doesn't already end a sentence.
+    private static func rejoiningSplitSentences(_ text: String) -> String {
+        var merged: [String] = []
+        for paragraph in text.components(separatedBy: "\n\n") {
+            if let previous = merged.last,
+               let firstChar = paragraph.first, firstChar.isLowercase,
+               let lastChar = previous.last, !".!?".contains(lastChar) {
+                merged[merged.count - 1] = "\(previous) \(paragraph)"
+            } else {
+                merged.append(paragraph)
+            }
+        }
+        return merged.joined(separator: "\n\n")
     }
 
     /// Resolves the API key from, in order: the `CONGRESS_GOV_API_KEY`
@@ -951,6 +1007,7 @@ private struct BillActionsResponse: Decodable {
     let actions: [Action]
 
     struct Action: Decodable {
+        let text: String?
         let recordedVotes: [RecordedVote]?
     }
 

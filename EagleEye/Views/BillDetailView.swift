@@ -16,13 +16,12 @@ struct BillDetailView: View {
     @Environment(\.userRepBioguideIDs) private var userRepIDs
 
     private let service = CongressService()
-    @State private var tally: BillVoteTally?
     @State private var voteLoad: VoteLoadState = .loading
 
     private enum VoteLoadState {
         case loading
-        case loaded
-        case unavailable
+        case recorded(BillVoteTally)
+        case unrecorded(PassageMethod?)
     }
 
     /// The summary split into its paragraphs, so each renders as its own block
@@ -121,14 +120,32 @@ struct BillDetailView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-        case .loaded:
-            if let tally {
-                VoteTallyView(tally: tally, userRepIDs: userRepIDs)
-            }
-        case .unavailable:
-            Text("No House roll-call vote has been recorded for this bill yet. (Senate roll calls aren't available from this data source.)")
+        case .recorded(let tally):
+            VoteTallyView(tally: tally, userRepIDs: userRepIDs)
+        case .unrecorded(let method):
+            Text(unavailableMessage(method: method))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Explains *why* there's no tally. When the record names how the bill
+    /// passed, say so plainly; otherwise the message differs by how far the
+    /// bill has come — one that has cleared a chamber passed without a recorded
+    /// vote, whereas one still in committee hasn't reached a floor vote.
+    private func unavailableMessage(method: PassageMethod?) -> String {
+        switch method {
+        case .voiceVote:
+            return "Passed by voice vote — no roll-call vote was recorded."
+        case .unanimousConsent:
+            return "Passed by unanimous consent — no roll-call vote was recorded."
+        case nil:
+            switch bill.status {
+            case .introduced, .inCommittee:
+                return "This bill hasn't reached a recorded floor vote yet."
+            case .passedHouse, .passedSenate, .toPresident, .enacted:
+                return "Passed without a recorded roll-call vote. (Senate roll calls aren't available from this data source.)"
+            }
         }
     }
 
@@ -136,16 +153,18 @@ struct BillDetailView: View {
         guard let congress = bill.congress,
               let type = bill.billType,
               let number = bill.billNumber else {
-            voteLoad = .unavailable
+            voteLoad = .unrecorded(nil)
             return
         }
 
         voteLoad = .loading
-        if let result = await service.billVoteTally(congress: congress, type: type, number: number) {
-            tally = result
-            voteLoad = .loaded
-        } else {
-            voteLoad = .unavailable
+        switch await service.billVote(congress: congress, type: type, number: number) {
+        case .recorded(let tally):
+            voteLoad = .recorded(tally)
+        case .unrecorded(let method):
+            voteLoad = .unrecorded(method)
+        case .unavailable:
+            voteLoad = .unrecorded(nil)
         }
     }
 }

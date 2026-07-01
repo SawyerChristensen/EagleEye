@@ -142,6 +142,25 @@ struct BillVoteTally: Hashable {
     var total: Int { memberVotes.count }
 }
 
+/// How a bill cleared a chamber when no roll call was taken, parsed from the
+/// action text so the detail screen can name the method rather than show a
+/// vague "no vote recorded".
+enum PassageMethod {
+    case voiceVote
+    case unanimousConsent
+}
+
+/// The result of looking up a bill's House vote.
+enum BillVoteOutcome {
+    /// A recorded roll call with a full member roster.
+    case recorded(BillVoteTally)
+    /// The bill cleared the floor without a roll call. `method` names how when
+    /// the action text says so, otherwise `nil`.
+    case unrecorded(method: PassageMethod?)
+    /// No vote was found — the bill is still pre-floor, or the lookup failed.
+    case unavailable
+}
+
 // MARK: - Display formatting
 
 extension Bill {
@@ -168,8 +187,41 @@ extension Bill {
             .components(separatedBy: " — ")
             .filter { Bill.codeToken($0) == nil }
             .joined(separator: " — ")
+        let cleaned = Bill.stripStatutoryClauses(name)
             .trimmingCharacters(in: .whitespaces)
-        return name.isEmpty ? title : name
+        return cleaned.isEmpty ? title : cleaned
+    }
+
+    /// Strips the "pursuant to …" statutory-citation clause that clutters the
+    /// titles of directing and authorizing resolutions, e.g. turning
+    /// "Directing the President pursuant to section 5(c) of the War Powers
+    /// Resolution to remove …" into "Directing the President to remove …".
+    ///
+    /// The clause runs from "pursuant to" up to the proper-noun that names the
+    /// statute — "Act", "Resolution", "Code", etc. Matching is non-greedy so it
+    /// stops at the first such name, and the names must be capitalized so a
+    /// lowercase verb like "act" won't cut the clause short. Whatever whitespace
+    /// is left behind gets collapsed so the surrounding words read naturally.
+    static func stripStatutoryClauses(_ text: String) -> String {
+        let clausePattern =
+            #"\s*[Pp]ursuant to\b.+?\b(?:Act|Resolution|Code|Constitution|Statutes at Large|U\.S\.C\.)\b"#
+        let stripped = text.replacingOccurrences(
+            of: clausePattern,
+            with: " ",
+            options: .regularExpression
+        )
+        // Collapse the runs of whitespace left where clauses were removed.
+        let collapsed = stripped.replacingOccurrences(
+            of: #"\s{2,}"#,
+            with: " ",
+            options: .regularExpression
+        )
+        // Tidy up spaces stranded before punctuation, e.g. "President , to".
+        return collapsed.replacingOccurrences(
+            of: #"\s+([,.;:])"#,
+            with: "$1",
+            options: .regularExpression
+        )
     }
 
     /// Returns the trimmed text when it looks like a measure code (e.g. "H.R.
