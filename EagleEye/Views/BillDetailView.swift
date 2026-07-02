@@ -13,15 +13,30 @@ struct BillDetailView: View {
     let bill: Bill
 
     /// The user's representatives, so their votes float to the top of the tally.
+    /// House rows are matched by Bioguide ID; the Senate roster has none, so
+    /// senators are matched by a state+surname key instead.
     @Environment(\.userRepBioguideIDs) private var userRepIDs
+    @Environment(\.userRepMatchKeys) private var userRepMatchKeys
 
     private let service = CongressService()
     @State private var voteLoad: VoteLoadState = .loading
 
     private enum VoteLoadState {
         case loading
-        case recorded(BillVoteTally)
+        case recorded([BillVoteTally])
         case unrecorded(PassageMethod?)
+    }
+
+    /// The date of the bill's most recent action. The feed's `latestActionDate`
+    /// can lag behind a roll-call vote that Congress.gov records separately, so
+    /// once a recorded vote is loaded we surface whichever date is newer rather
+    /// than showing a "last action" that predates the vote just above it.
+    private var lastActionDate: Date {
+        if case .recorded(let tallies) = voteLoad,
+           let newestVote = tallies.compactMap(\.date).max() {
+            return max(bill.latestActionDate, newestVote)
+        }
+        return bill.latestActionDate
     }
 
     /// The summary split into its paragraphs, so each renders as its own block
@@ -51,7 +66,7 @@ struct BillDetailView: View {
                         }
                     }
 
-                    StatusBadge(status: bill.status, chamber: bill.chamber)
+                    BillProgressStrip(status: bill.status, chamber: bill.chamber)
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
 
@@ -63,7 +78,7 @@ struct BillDetailView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         ForEach(bill.topics, id: \.self) { topic in
-                            Text(topic)
+                            Label(topic, systemImage: PolicyArea.symbolName(for: topic))
                                 .font(.caption)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
@@ -82,15 +97,17 @@ struct BillDetailView: View {
                     }
                 }
 
-                Text("Last action on \(bill.latestActionDate, format: .dateTime.month().day().year())")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 8)
-
                 Divider()
                     .padding(.top, 4)
 
                 votesSection
+
+                Divider()
+                    .padding(.top, 8)
+
+                Text("Last action on \(lastActionDate, format: .dateTime.month().day().year())")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
             .padding(.horizontal)
             .padding(.bottom)
@@ -109,7 +126,7 @@ struct BillDetailView: View {
 
     @ViewBuilder
     private var votesSection: some View {
-        Text("Roll Call Vote")
+        Text(voteSectionTitle)
             .font(.headline)
 
         switch voteLoad {
@@ -120,13 +137,38 @@ struct BillDetailView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-        case .recorded(let tally):
-            VoteTallyView(tally: tally, userRepIDs: userRepIDs)
+        case .recorded(let tallies):
+            VStack(alignment: .leading, spacing: 24) {
+                ForEach(Array(tallies.enumerated()), id: \.offset) { _, tally in
+                    VStack(alignment: .leading, spacing: 10) {
+                        // Label the chamber so a bill with both a House and a
+                        // Senate vote reads clearly; harmless with just one.
+                        Text("\(tally.chamber.rawValue) Vote")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.secondary)
+                        VoteTallyView(tally: tally, userRepIDs: userIDs(for: tally.chamber))
+                    }
+                }
+            }
         case .unrecorded(let method):
             Text(unavailableMessage(method: method))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    /// "Roll Call Votes" when both chambers voted, singular otherwise.
+    private var voteSectionTitle: String {
+        if case .recorded(let tallies) = voteLoad, tallies.count > 1 {
+            return "Roll Call Votes"
+        }
+        return "Roll Call Vote"
+    }
+
+    /// The identity set used to surface the user's own members in a chamber's
+    /// tally: Bioguide IDs for the House, state+surname keys for the Senate.
+    private func userIDs(for chamber: Chamber) -> Set<String> {
+        chamber == .senate ? userRepMatchKeys : userRepIDs
     }
 
     /// Explains *why* there's no tally. When the record names how the bill
@@ -144,7 +186,7 @@ struct BillDetailView: View {
             case .introduced, .inCommittee:
                 return "This bill hasn't reached a recorded floor vote yet."
             case .passedHouse, .passedSenate, .toPresident, .enacted:
-                return "Passed without a recorded roll-call vote. (Senate roll calls aren't available from this data source.)"
+                return "Passed without a recorded roll-call vote."
             }
         }
     }
@@ -159,8 +201,8 @@ struct BillDetailView: View {
 
         voteLoad = .loading
         switch await service.billVote(congress: congress, type: type, number: number) {
-        case .recorded(let tally):
-            voteLoad = .recorded(tally)
+        case .recorded(let tallies):
+            voteLoad = .recorded(tallies)
         case .unrecorded(let method):
             voteLoad = .unrecorded(method)
         case .unavailable:
@@ -187,6 +229,124 @@ private struct BillTitleLabel: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+}
+
+// MARK: - Progress strip
+
+private extension HorizontalAlignment {
+    /// Centers the progress strip on the *current* stage badge rather than the
+    /// strip's geometric middle, so the badge stays screen-centered while the
+    /// past and next stages fan out to either side.
+    enum ProgressCurrent: AlignmentID {
+        static func defaultValue(in d: ViewDimensions) -> CGFloat { d[HorizontalAlignment.center] }
+    }
+    static let progressCurrent = HorizontalAlignment(ProgressCurrent.self)
+}
+
+/// A horizontal filmstrip of the bill's journey: the stage it just cleared
+/// (dimmed, to the left), the stage it sits at now (the colored StatusBadge),
+/// and the stage it advances to next (greyed, since it hasn't happened yet).
+/// The flanking stages fade out where they exceed the view's bounds, keeping
+/// the current stage centered and prominent — the same edge fade the home
+/// feed's topic strip uses.
+private struct BillProgressStrip: View {
+    let status: BillStatus
+    let chamber: Chamber
+
+    var body: some View {
+        // A hidden pill-height reference fills the available (already-padded)
+        // width and fixes the row height, while the real pills sit in an overlay
+        // so their combined width can exceed the row without ever forcing the
+        // detail view wider than the screen (which would strip its padding).
+        // Anything past the edges is clipped and faded — the same technique the
+        // home feed's topic strip uses.
+        Text(" ")
+            .font(.caption.weight(.semibold))
+            .padding(.vertical, 4)
+            .hidden()
+            .frame(maxWidth: .infinity)
+            .overlay(alignment: Alignment(horizontal: .progressCurrent, vertical: .center)) {
+                // A real HStack guarantees an 8pt gap between stages (so they can
+                // never overlap), while the custom `.progressCurrent` alignment
+                // pins the *current* badge's center — not the strip's geometric
+                // middle — to the row's center, so the badge stays screen-centered
+                // however wide the flanking labels are. `.fixedSize()` keeps the
+                // pills at full width, letting them overflow and fade at the edges.
+                HStack(spacing: 8) {
+                    if let previous = status.previousStage(chamber: chamber) {
+                        StepPill(label: previous.displayLabel(chamber: chamber), kind: .past)
+                    }
+                    StatusBadge(status: status, chamber: chamber)
+                        .alignmentGuide(.progressCurrent) { $0[HorizontalAlignment.center] }
+                    if let next = status.nextStage(chamber: chamber) {
+                        StepPill(label: next.displayLabel(chamber: chamber), kind: .future)
+                    }
+                }
+                .fixedSize()
+            }
+            .mask(edgeFade)
+    }
+
+    private var edgeFade: some View {
+        HStack(spacing: 0) {
+            LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                .frame(width: 28)
+            Rectangle()
+            LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                .frame(width: 28)
+        }
+    }
+}
+
+/// A flanking stage in the progress strip. A past stage reads in muted
+/// secondary ink to show it's behind the bill; a future stage is greyed and
+/// lighter still to signal it hasn't happened yet.
+private struct StepPill: View {
+    enum Kind { case past, future }
+    let label: String
+    let kind: Kind
+
+    var body: some View {
+        Text(label)
+            .font(.caption.weight(.medium))
+            .lineLimit(1)
+            .foregroundStyle(kind == .past ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(
+                kind == .past ? Color(.systemGray5) : Color(.systemGray6),
+                in: .capsule
+            )
+    }
+}
+
+private extension BillStatus {
+    /// The ordered stages a bill passes through, from introduction to
+    /// enactment, arranged for the chamber it originated in — a Senate bill
+    /// clears the Senate before the House, and a House bill the reverse.
+    static func pipeline(originatingIn chamber: Chamber) -> [BillStatus] {
+        switch chamber {
+        case .house:
+            [.introduced, .inCommittee, .passedHouse, .passedSenate, .toPresident, .enacted]
+        case .senate:
+            [.introduced, .inCommittee, .passedSenate, .passedHouse, .toPresident, .enacted]
+        }
+    }
+
+    /// The stage immediately behind this one on the bill's path, or `nil` when
+    /// this is the first stage.
+    func previousStage(chamber: Chamber) -> BillStatus? {
+        let stages = Self.pipeline(originatingIn: chamber)
+        guard let index = stages.firstIndex(of: self), index > 0 else { return nil }
+        return stages[index - 1]
+    }
+
+    /// The stage the bill advances to next, or `nil` once it has been enacted.
+    func nextStage(chamber: Chamber) -> BillStatus? {
+        let stages = Self.pipeline(originatingIn: chamber)
+        guard let index = stages.firstIndex(of: self), index + 1 < stages.count else { return nil }
+        return stages[index + 1]
     }
 }
 
@@ -413,12 +573,24 @@ private struct UserRepBioguideIDsKey: EnvironmentKey {
     static let defaultValue: Set<String> = []
 }
 
+private struct UserRepMatchKeysKey: EnvironmentKey {
+    static let defaultValue: Set<String> = []
+}
+
 extension EnvironmentValues {
     /// Bioguide IDs of the user's own representatives, used to surface their
-    /// votes at the top of a bill's roll-call breakdown.
+    /// votes at the top of a bill's House roll-call breakdown.
     var userRepBioguideIDs: Set<String> {
         get { self[UserRepBioguideIDsKey.self] }
         set { self[UserRepBioguideIDsKey.self] = newValue }
+    }
+
+    /// State+surname keys (see `MemberVote.matchKey`) for the user's own
+    /// members, used to surface their votes in a Senate tally, whose roster
+    /// carries no Bioguide ID to match on.
+    var userRepMatchKeys: Set<String> {
+        get { self[UserRepMatchKeysKey.self] }
+        set { self[UserRepMatchKeysKey.self] = newValue }
     }
 }
 

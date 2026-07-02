@@ -40,6 +40,10 @@ struct CongressService {
     var apiKey: String = CongressService.configuredAPIKey
     var session: URLSession = .shared
 
+    /// Loads senators' voting history from Senate.gov, which publishes the
+    /// Senate roll calls that Congress.gov's House-only endpoints omit.
+    var senateService = SenateService()
+
     enum ServiceError: LocalizedError {
         case missingAPIKey
         case badResponse(Int)
@@ -161,11 +165,29 @@ struct CongressService {
             path: "member/\(bioguideID)/cosponsored-legislation",
             limit: limit
         )
-        async let votes = votingHistory(for: representative)
+        async let votes = recentVotes(for: representative)
 
         return representative
             .withBills(sponsored: await sponsored, cosponsored: await cosponsored)
             .withVotes(await votes)
+    }
+
+    /// Loads a member's recent significant votes from the right source: the
+    /// House roll calls on Congress.gov for representatives, Senate.gov for
+    /// senators (whose votes Congress.gov doesn't cover).
+    private func recentVotes(for representative: Representative) async -> [VoteRecord] {
+        switch representative.office {
+        case .senator:
+            // Resolve Senate measures' titles through the same Congress.gov
+            // lookup the House feed uses, so both chambers' rows read alike.
+            var senate = senateService
+            senate.resolveTitle = { _, type, number in
+                await self.billName(type: type, number: number)
+            }
+            return await senate.votingHistory(for: representative)
+        case .representative:
+            return await votingHistory(for: representative)
+        }
     }
 
     // MARK: - Voting history
@@ -434,14 +456,16 @@ struct CongressService {
 
     // MARK: - Bill roll-call tally
 
-    /// Looks up a bill's House vote. Resolves the most recent House roll call to
-    /// a full member roster when one exists; otherwise reports that the bill
-    /// cleared the floor without a roll call — naming the method (voice vote,
-    /// unanimous consent) when the action text says so — or that no vote was
-    /// found at all.
+    /// Looks up a bill's roll-call votes in both chambers. Resolves the most
+    /// recent House roll call (via Congress.gov) and the most recent Senate roll
+    /// call (via Senate.gov, which Congress.gov's House-only endpoints omit) to
+    /// full member rosters. A bill that cleared both chambers yields both
+    /// tallies, most-recent first. When no roster is found it reports how the
+    /// bill passed — voice vote, unanimous consent — when the action text says
+    /// so, otherwise that no vote was found.
     func billVote(congress: Int, type: String, number: String) async -> BillVoteOutcome {
-        // The bill's recorded votes live on its actions, each carrying a roll-call
-        // number we can resolve to a full member roster.
+        // The bill's recorded votes live on its actions, each carrying the
+        // chamber and a roll-call number we can resolve to a full member roster.
         guard let actions = try? await getJSON(
             BillActionsResponse.self,
             path: "bill/\(congress)/\(type.lowercased())/\(number)/actions",
@@ -450,24 +474,56 @@ struct CongressService {
             return .unavailable
         }
 
-        let houseVotes = actions.actions
-            .compactMap(\.recordedVotes)
-            .flatMap { $0 }
-            .filter { ($0.chamber ?? "").localizedCaseInsensitiveContains("house") }
+        let recorded = actions.actions.compactMap(\.recordedVotes).flatMap { $0 }
+        async let house = latestHouseTally(among: recorded, fallbackCongress: congress)
+        async let senate = latestSenateTally(among: recorded, fallbackCongress: congress)
 
-        // Prefer the most recent House roll call — typically final passage or the
-        // bill's last floor disposition — resolved to its full roster.
-        if let latest = houseVotes.max(by: { ($0.date ?? "") < ($1.date ?? "") }),
-           let session = latest.sessionNumber,
-           let roll = latest.rollNumber,
-           let tally = await memberTally(
-               congress: latest.congress ?? congress, session: session, roll: roll
-           ) {
-            return .recorded(tally)
+        let tallies = [await house, await senate]
+            .compactMap { $0 }
+            .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
+
+        if !tallies.isEmpty {
+            return .recorded(tallies)
         }
 
         // No roll call to show — say how the bill passed, if the record says.
         return .unrecorded(method: Self.passageMethod(fromActions: actions.actions))
+    }
+
+    /// Resolves the bill's most recent House roll call to a full roster, or nil
+    /// when it has no House recorded vote.
+    private func latestHouseTally(
+        among recorded: [BillActionsResponse.RecordedVote],
+        fallbackCongress: Int
+    ) async -> BillVoteTally? {
+        let houseVotes = recorded.filter {
+            ($0.chamber ?? "").localizedCaseInsensitiveContains("house")
+        }
+        guard let latest = houseVotes.max(by: { ($0.date ?? "") < ($1.date ?? "") }),
+              let session = latest.sessionNumber, let roll = latest.rollNumber else {
+            return nil
+        }
+        return await memberTally(
+            congress: latest.congress ?? fallbackCongress, session: session, roll: roll
+        )
+    }
+
+    /// Resolves the bill's most recent Senate roll call to a full roster via
+    /// Senate.gov, or nil when it has no Senate recorded vote.
+    private func latestSenateTally(
+        among recorded: [BillActionsResponse.RecordedVote],
+        fallbackCongress: Int
+    ) async -> BillVoteTally? {
+        let senateVotes = recorded.filter {
+            ($0.chamber ?? "").localizedCaseInsensitiveContains("senate")
+        }
+        guard let latest = senateVotes.max(by: { ($0.date ?? "") < ($1.date ?? "") }),
+              let session = latest.sessionNumber, let roll = latest.rollNumber else {
+            return nil
+        }
+        return await senateService.billTally(
+            congress: latest.congress ?? fallbackCongress, session: session, rollCall: roll
+        )
     }
 
     /// Resolves a House roll call to its full member roster and summary. Returns
@@ -496,6 +552,7 @@ struct CongressService {
         guard !members.isEmpty else { return nil }
 
         return BillVoteTally(
+            chamber: .house,
             question: payload.voteQuestion,
             date: Self.parseVoteDate(payload.startDate),
             result: payload.result,
@@ -1158,11 +1215,16 @@ extension Bill {
     }
 
     /// Formats a bill into its familiar short name, e.g. "Clean Water Act — H.R. 1234".
+    /// The title is run through the same statutory-clause cleanup the feed uses,
+    /// so the feed, both chambers' voting histories, and the profile bill lists
+    /// all render measure names identically.
     static func displayTitle(type: String?, number: String?, title: String) -> String {
+        let cleaned = stripStatutoryClauses(title).trimmingCharacters(in: .whitespaces)
+        let name = cleaned.isEmpty ? title : cleaned
         guard let number, !number.isEmpty, let prefix = typePrefix(type) else {
-            return title
+            return name
         }
-        return "\(title) — \(prefix) \(number)"
+        return "\(name) — \(prefix) \(number)"
     }
 
     private static func typePrefix(_ type: String?) -> String? {

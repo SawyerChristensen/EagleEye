@@ -37,6 +37,7 @@
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "BEF59A642FEB30D9009C2382"
                BuildableName = "EagleEyeTests.xctest"
+               BlueprintName = "EagleEyeTests"
                ReferencedContainer = "container:EagleEye.xcodeproj">
             </BuildableReference>
          </TestableReference>
@@ -47,6 +48,7 @@
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "BEF59A6E2FEB30D9009C2382"
                BuildableName = "EagleEyeUITests.xctest"
+               BlueprintName = "EagleEyeUITests"
                ReferencedContainer = "container:EagleEye.xcodeproj">
             </BuildableReference>
          </TestableReference>

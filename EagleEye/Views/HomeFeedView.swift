@@ -114,8 +114,9 @@ private struct TopicPillStrip: View {
         // overlay so their width never forces the row wider or squashes the
         // status badge — anything past the trailing edge is clipped and faded.
         // The font/padding here must match the pills below, otherwise the mask
-        // is shorter than the pills and clips them vertically.
-        Text(" ")
+        // is shorter than the pills and clips them vertically. It's a Label (not
+        // plain text) so the icon's height is accounted for.
+        Label(" ", systemImage: "tag")
             .font(.caption)
             .padding(.vertical, 5)
             .hidden()
@@ -123,13 +124,16 @@ private struct TopicPillStrip: View {
             .overlay(alignment: .leading) {
                 HStack(spacing: 6) {
                     ForEach(topics, id: \.self) { topic in
-                        Text(topic)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(.secondary.opacity(0.1), in: .capsule)
-                            .fixedSize()
+                        HStack(spacing: 4) {
+                            Image(systemName: PolicyArea.symbolName(for: topic))
+                            Text(topic)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(.secondary.opacity(0.1), in: .capsule)
+                        .fixedSize()
                     }
                 }
             }

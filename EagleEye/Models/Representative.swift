@@ -85,6 +85,109 @@ struct LegislationRef: Codable, Hashable, Identifiable {
     }
 }
 
+/// A link to a member's presence on a social-media platform.
+struct SocialLink: Codable, Hashable, Identifiable {
+    enum Platform: String, Codable, CaseIterable {
+        case twitter, facebook, youtube, instagram
+
+        /// Human-readable name, e.g. "X" for the platform formerly Twitter.
+        var displayName: String {
+            switch self {
+            case .twitter: "X"
+            case .facebook: "Facebook"
+            case .youtube: "YouTube"
+            case .instagram: "Instagram"
+            }
+        }
+
+        /// Name of the monochrome brand-logo asset (template-rendered) shown
+        /// beside the platform name.
+        var iconName: String {
+            switch self {
+            case .twitter: "LogoX"
+            case .facebook: "LogoFacebook"
+            case .youtube: "LogoYouTube"
+            case .instagram: "LogoInstagram"
+            }
+        }
+    }
+
+    let platform: Platform
+    /// The account handle or ID, without a leading "@".
+    let handle: String
+
+    var id: String { platform.rawValue }
+
+    /// The public profile URL for this account.
+    var url: URL? {
+        switch platform {
+        case .twitter: URL(string: "https://x.com/\(handle)")
+        case .facebook: URL(string: "https://facebook.com/\(handle)")
+        case .youtube: URL(string: "https://youtube.com/\(handle)")
+        case .instagram: URL(string: "https://instagram.com/\(handle)")
+        }
+    }
+}
+
+/// Office contact details for a member, shown on the profile.
+struct ContactInfo: Codable, Hashable {
+    /// The Washington, D.C. office address, as one display string.
+    let officeAddress: String?
+    /// The office telephone number.
+    let phone: String?
+    /// The member's official government website.
+    let website: URL?
+    /// Links to the member's social-media accounts.
+    let socialLinks: [SocialLink]
+
+    init(
+        officeAddress: String? = nil,
+        phone: String? = nil,
+        website: URL? = nil,
+        socialLinks: [SocialLink] = []
+    ) {
+        self.officeAddress = officeAddress
+        self.phone = phone
+        self.website = website
+        self.socialLinks = socialLinks
+    }
+
+    /// Whether there's anything worth showing in the contact section.
+    var hasContent: Bool {
+        officeAddress?.isEmpty == false || phone?.isEmpty == false
+            || website != nil || !socialLinks.isEmpty
+    }
+}
+
+/// A summary of a member's stock-trade disclosures under the STOCK Act, shown
+/// on the profile. Built from the House Clerk's Periodic Transaction Report
+/// (PTR) index; the Senate publishes its filings separately and isn't covered
+/// here yet, so senators carry a link-only summary.
+struct TradingActivity: Codable, Hashable {
+    /// Number of Periodic Transaction Reports filed in the trailing window.
+    let recentReportCount: Int
+    /// Date of the most recent Periodic Transaction Report, if any.
+    let latestReportDate: Date?
+    /// A link to view the member's disclosures — the most recent PTR itself for
+    /// House members, or the Senate eFD search for senators.
+    let disclosureURL: URL?
+    /// Whether this reflects the member's real filed reports (House) rather than
+    /// just a pointer to where their filings live (Senate).
+    let isCovered: Bool
+
+    init(
+        recentReportCount: Int = 0,
+        latestReportDate: Date? = nil,
+        disclosureURL: URL? = nil,
+        isCovered: Bool = false
+    ) {
+        self.recentReportCount = recentReportCount
+        self.latestReportDate = latestReportDate
+        self.disclosureURL = disclosureURL
+        self.isCovered = isCovered
+    }
+}
+
 /// A source of campaign funding, used on the member's profile.
 struct Funder: Codable, Hashable {
     let name: String
@@ -125,6 +228,10 @@ struct Representative: Identifiable, Codable, Hashable {
     let cosponsoredBills: [LegislationRef]
     /// Top campaign funders (placeholder until a finance API is wired up).
     let funders: [Funder]
+    /// Office address, phone, website, and social links; `nil` until loaded.
+    let contact: ContactInfo?
+    /// Stock-trade disclosure summary; `nil` until loaded.
+    let tradingActivity: TradingActivity?
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: officeLatitude, longitude: officeLongitude)
@@ -150,7 +257,9 @@ struct Representative: Identifiable, Codable, Hashable {
             keyVotes: keyVotes,
             sponsoredBills: sponsored,
             cosponsoredBills: cosponsored,
-            funders: funders
+            funders: funders,
+            contact: contact,
+            tradingActivity: tradingActivity
         )
     }
 
@@ -173,7 +282,9 @@ struct Representative: Identifiable, Codable, Hashable {
             keyVotes: keyVotes,
             sponsoredBills: sponsoredBills,
             cosponsoredBills: cosponsoredBills,
-            funders: funders
+            funders: funders,
+            contact: contact,
+            tradingActivity: tradingActivity
         )
     }
 
@@ -196,7 +307,84 @@ struct Representative: Identifiable, Codable, Hashable {
             keyVotes: keyVotes,
             sponsoredBills: sponsoredBills,
             cosponsoredBills: cosponsoredBills,
-            funders: funders
+            funders: funders,
+            contact: contact,
+            tradingActivity: tradingActivity
+        )
+    }
+
+    /// Returns a copy with the top-funders list replaced, used to fill in that
+    /// profile section after the member's campaign finance data is loaded.
+    func withFunders(_ funders: [Funder]) -> Representative {
+        Representative(
+            id: id,
+            name: name,
+            party: party,
+            office: office,
+            state: state,
+            district: district,
+            bioguideID: bioguideID,
+            officeLatitude: officeLatitude,
+            officeLongitude: officeLongitude,
+            portraitURL: portraitURL,
+            tenureStart: tenureStart,
+            committees: committees,
+            keyVotes: keyVotes,
+            sponsoredBills: sponsoredBills,
+            cosponsoredBills: cosponsoredBills,
+            funders: funders,
+            contact: contact,
+            tradingActivity: tradingActivity
+        )
+    }
+
+    /// Returns a copy with the stock-trade disclosure summary filled in, used
+    /// after the member's Periodic Transaction Reports are loaded.
+    func withTradingActivity(_ tradingActivity: TradingActivity) -> Representative {
+        Representative(
+            id: id,
+            name: name,
+            party: party,
+            office: office,
+            state: state,
+            district: district,
+            bioguideID: bioguideID,
+            officeLatitude: officeLatitude,
+            officeLongitude: officeLongitude,
+            portraitURL: portraitURL,
+            tenureStart: tenureStart,
+            committees: committees,
+            keyVotes: keyVotes,
+            sponsoredBills: sponsoredBills,
+            cosponsoredBills: cosponsoredBills,
+            funders: funders,
+            contact: contact,
+            tradingActivity: tradingActivity
+        )
+    }
+
+    /// Returns a copy with the contact information filled in, used after the
+    /// member's office details and social links are loaded.
+    func withContact(_ contact: ContactInfo) -> Representative {
+        Representative(
+            id: id,
+            name: name,
+            party: party,
+            office: office,
+            state: state,
+            district: district,
+            bioguideID: bioguideID,
+            officeLatitude: officeLatitude,
+            officeLongitude: officeLongitude,
+            portraitURL: portraitURL,
+            tenureStart: tenureStart,
+            committees: committees,
+            keyVotes: keyVotes,
+            sponsoredBills: sponsoredBills,
+            cosponsoredBills: cosponsoredBills,
+            funders: funders,
+            contact: contact,
+            tradingActivity: tradingActivity
         )
     }
 
@@ -240,7 +428,9 @@ struct Representative: Identifiable, Codable, Hashable {
         keyVotes: [VoteRecord] = [],
         sponsoredBills: [LegislationRef] = [],
         cosponsoredBills: [LegislationRef] = [],
-        funders: [Funder] = []
+        funders: [Funder] = [],
+        contact: ContactInfo? = nil,
+        tradingActivity: TradingActivity? = nil
     ) {
         self.id = id
         self.name = name
@@ -258,5 +448,7 @@ struct Representative: Identifiable, Codable, Hashable {
         self.sponsoredBills = sponsoredBills
         self.cosponsoredBills = cosponsoredBills
         self.funders = funders
+        self.contact = contact
+        self.tradingActivity = tradingActivity
     }
 }

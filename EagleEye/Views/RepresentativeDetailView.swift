@@ -25,10 +25,12 @@ struct RepresentativeDetailView: View {
             VStack(alignment: .leading, spacing: 24) {
                 header
 
+                contactSection
                 committeesSection
                 sponsorshipSection
                 votingHistorySection
                 fundingSection
+                tradingSection
             }
             .padding()
         }
@@ -57,6 +59,46 @@ struct RepresentativeDetailView: View {
     }
 
     // MARK: - Sections
+
+    /// Office address, phone, website, and social links. Hidden entirely until
+    /// contact details have loaded so the profile doesn't show an empty card.
+    @ViewBuilder
+    private var contactSection: some View {
+        if let contact = representative.contact, contact.hasContent {
+            ProfileSection(title: "Contact", systemImage: "envelope") {
+                VStack(alignment: .leading, spacing: 12) {
+                    if let website = contact.website {
+                        ContactRow(
+                            systemImage: "globe",
+                            text: website.host ?? website.absoluteString,
+                            url: website
+                        )
+                    }
+                    if let phone = contact.phone {
+                        ContactRow(
+                            systemImage: "phone",
+                            text: phone,
+                            url: Self.telURL(for: phone)
+                        )
+                    }
+                    if let address = contact.officeAddress {
+                        ContactRow(systemImage: "building.columns", text: address, url: nil)
+                    }
+                    if !contact.socialLinks.isEmpty {
+                        SocialLinksRow(links: contact.socialLinks)
+                            .padding(.top, 2)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Builds a dialable `tel:` URL from a displayed phone number, keeping only
+    /// its digits.
+    private static func telURL(for phone: String) -> URL? {
+        let digits = phone.filter(\.isNumber)
+        return digits.isEmpty ? nil : URL(string: "tel:\(digits)")
+    }
 
     private var committeesSection: some View {
         ProfileSection(title: "Committees", systemImage: "person.3") {
@@ -104,15 +146,63 @@ struct RepresentativeDetailView: View {
         }
     }
 
+    /// STOCK Act stock-trade disclosures. For House members this is a real count
+    /// of Periodic Transaction Reports; senators (whose filings this data source
+    /// doesn't cover) get a pointer to the Senate's own portal.
+    @ViewBuilder
+    private var tradingSection: some View {
+        if let activity = representative.tradingActivity {
+            ProfileSection(title: "Stock Trades", systemImage: "chart.line.uptrend.xyaxis") {
+                VStack(alignment: .leading, spacing: 10) {
+                    if !activity.isCovered {
+                        EmptyNote("Senate stock-trade filings aren't machine-readable here yet — view them on the Senate's disclosure portal.")
+                    } else if activity.recentReportCount > 0 {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text("\(activity.recentReportCount)")
+                                .font(.title.bold())
+                                .contentTransition(.numericText())
+                            Text("stock-trade disclosure\(activity.recentReportCount == 1 ? "" : "s") in the past year")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        if let date = activity.latestReportDate {
+                            Text("Most recent: \(date.formatted(.dateTime.month().day().year()))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        EmptyNote("No stock-trade disclosures filed in the past year.")
+                    }
+
+                    if let url = activity.disclosureURL {
+                        ContactRow(
+                            systemImage: "arrow.up.right.square",
+                            text: activity.isCovered ? "View latest filing" : "View on Senate eFD",
+                            url: url
+                        )
+                    }
+
+                    Text("Periodic Transaction Reports disclosed under the STOCK Act.")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+    }
+
     private var fundingSection: some View {
         ProfileSection(title: "Top Funders", systemImage: "dollarsign.circle") {
             if representative.funders.isEmpty {
                 EmptyNote("Funding data unavailable.")
             } else {
-                VStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 12) {
                     ForEach(representative.funders, id: \.self) { funder in
                         FunderRow(funder: funder)
                     }
+                    Text("Direct contributions from each organization's political action committee (PAC). Federal law bars companies and unions from donating to candidates directly.")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .padding(.top, 2)
                 }
             }
         }
@@ -309,6 +399,129 @@ private struct VoteRow: View {
     }
 }
 
+/// A single contact detail: an icon, a value, and — when the value is
+/// actionable (a website, a phone number) — a tap target that opens it.
+private struct ContactRow: View {
+    let systemImage: String
+    let text: String
+    /// When non-nil, the whole row becomes a link that opens this URL.
+    let url: URL?
+
+    var body: some View {
+        if let url {
+            Link(destination: url) {
+                content(highlighted: true)
+            }
+            .buttonStyle(.plain)
+        } else {
+            content(highlighted: false)
+        }
+    }
+
+    private func content(highlighted: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.subheadline)
+                .foregroundStyle(highlighted ? Color.accentColor : .secondary)
+                .frame(width: 20, alignment: .center)
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(highlighted ? Color.accentColor : .primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// A wrapping row of tappable capsules linking out to the member's social
+/// accounts.
+private struct SocialLinksRow: View {
+    let links: [SocialLink]
+
+    var body: some View {
+        WrappingHStack(spacing: 8, lineSpacing: 8) {
+            ForEach(links) { link in
+                if let url = link.url {
+                    Link(destination: url) {
+                        Label {
+                            Text(link.platform.displayName)
+                        } icon: {
+                            Image(link.platform.iconName)
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 11, height: 11)
+                        }
+                        .font(.caption.bold())
+                        .labelStyle(.titleAndIcon)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.quaternary.opacity(0.6), in: .capsule)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+}
+
+/// Lays child views out left-to-right, wrapping onto a new line when the next
+/// child would overflow the available width — used for the social-link capsules.
+private struct WrappingHStack: Layout {
+    var spacing: CGFloat = 8
+    var lineSpacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        let rows = layout(subviews: subviews, maxWidth: maxWidth)
+        return CGSize(width: proposal.width ?? rows.width, height: rows.height)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        let rows = layout(subviews: subviews, maxWidth: bounds.width)
+        for placement in rows.placements {
+            let position = CGPoint(x: bounds.minX + placement.x, y: bounds.minY + placement.y)
+            subviews[placement.index].place(
+                at: position,
+                proposal: ProposedViewSize(placement.size)
+            )
+        }
+    }
+
+    /// Computes each subview's offset within a wrapping layout of the given
+    /// width, along with the total size consumed.
+    private func layout(
+        subviews: Subviews,
+        maxWidth: CGFloat
+    ) -> (placements: [(index: Int, x: CGFloat, y: CGFloat, size: CGSize)], width: CGFloat, height: CGFloat) {
+        var placements: [(index: Int, x: CGFloat, y: CGFloat, size: CGSize)] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var usedWidth: CGFloat = 0
+
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            if x > 0, x + size.width > maxWidth {
+                x = 0
+                y += rowHeight + lineSpacing
+                rowHeight = 0
+            }
+            placements.append((index, x, y, size))
+            x += size.width + spacing
+            usedWidth = max(usedWidth, x - spacing)
+            rowHeight = max(rowHeight, size.height)
+        }
+
+        return (placements, usedWidth, y + rowHeight)
+    }
+}
+
 private struct FunderRow: View {
     let funder: Funder
 
@@ -317,9 +530,11 @@ private struct FunderRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(funder.name)
                     .font(.subheadline)
-                Text(funder.category)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if !funder.category.isEmpty {
+                    Text(funder.category)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer()
             Text(funder.amount, format: .currency(code: "USD").precision(.fractionLength(0)))

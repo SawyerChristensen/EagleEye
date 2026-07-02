@@ -66,8 +66,16 @@ struct ContentView: View {
             }
         }
         // Make the user's delegation available to bill detail screens so each
-        // roll-call tally can surface their representatives' votes on top.
+        // roll-call tally can surface their representatives' votes on top. The
+        // House tally matches on Bioguide ID; the Senate roster has none, so it
+        // matches on a state+surname key instead.
         .environment(\.userRepBioguideIDs, Set(store.representatives.compactMap(\.bioguideID)))
+        .environment(\.userRepMatchKeys, Set(store.representatives.map {
+            MemberVote.matchKey(
+                state: $0.state,
+                lastName: MemberVote.lastName(fromDisplayName: $0.name)
+            )
+        }))
     }
 
     /// Asks for the user's location, then loads their delegation. Falls back to

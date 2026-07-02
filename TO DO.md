@@ -25,23 +25,29 @@
 - [x] Center the heading/title abvo
 - [x] passed house in home view is squased, also consider removing the pill look
 - [x] Some bills say "passed house" but dont display a roll call vote
-- [ ] Add another pill after the "passed house" pill that shows what the next step for the bill is or where the bill is now in the detail view. either in the senate, or if passed both, on the presidents desk, etc. show the future one in grey as it hasnt happened yet. also maybe show the past step behind it to the left, blur where the pills is exceeding bounds similar to how the topic pill blurs out in the home feed if that same approach is advisable.
-- [ ] Some bills say "last action on" and then a date that is older than when the last vote was. 
-- [ ] Make the sample topic list only have one topic to reflect real bills. also match it to the real 32 list the library of congress uses. also, append a best-matching SF symbol to what the topic is
-- [ ] Something happened to the ranking algorithm. no "enacted laws" are displayed in the top 20
+- [x] Some bills say "last action on" and then a date that is older than when the last vote was. also move this form below the summary to under a dividor under the voting history
+- [x] Make the sample topic list only have one topic to reflect real bills. also match it to the real 32 list the library of congress uses. also, append a best-matching SF symbol to what the topic is
+- [x] Add another pill after the "passed house" pill that shows what the next step for the bill is or where the bill is now in the detail view. either in the senate, or if passed both, on the presidents desk, etc. show the future one in grey as it hasnt happened yet. also maybe show the past step behind it to the left, blur where the pills is exceeding bounds similar to how the topic pill blurs out in the home feed if that same approach is advisable.
 - [x] **QOL:** Skip the location loading screen when we already have the user's location
-- [ ] **Bug:** Apple's location is sometimes vague (for privacy) and returns the wrong representative — let the user type in a ZIP code manually as a fallback (or as an option before we even ask for location)
 
 ---
 
 ## 0.3 — Richer Representative Data *(requires new external sources)*
 
-- [ ] Voting History for Senators *(needs senate.gov API — Congress.gov roll calls are House-only)*
-- [ ] Office contact information in the profile
-  - [ ] Link to their social media
-- [ ] Top Funders *(OpenFEC API)*
+- [x] Voting History for Senators *(senate.gov roll-call XML — Congress.gov roll calls are House-only)*
+  - [x] Add to profile
+  - [x] Add their votes under bill details if something is voted on in the senate
+- [x] Office contact information in the profile
+  - [x] Link to their social media
+  - [x] Add icons in the pill of each social media link
+- [x] Top Funders *(OpenFEC API — needs a free api.data.gov key in Secrets.plist as `OpenFECAPIKey`)*
 - [ ] "Beats the market" / insider-trading / corruption meter *(needs a trading-disclosure data source)*
-- [ ] Evaluate ProPublica API for voting records and sponsored bills — is it needed on top of Congress.gov?
+  - [x] Trading-activity indicator — House Periodic Transaction Report (PTR) count for the past year, latest-filing date, and a link to the filing, from the free House Clerk disclosure index (on-device ZIP + TSV parsing, no key). Senators link out to the Senate eFD portal.
+  - [ ] Senate coverage — parse efdsearch.senate.gov (agreement + CSRF + DataTables JSON) for senators' PTRs
+  - [ ] "Beats the market" quantitative metric — parse each PTR PDF into transactions (ticker, buy/sell, amount range, date) + pull historical prices to compute returns vs. a benchmark *(realistically a backend job, not on-device)*
+- [x] Evaluate ProPublica API for voting records and sponsored bills — is it needed on top of Congress.gov?
+  - **Verdict: No — don't adopt it.** ProPublica's Congress API was sunset ~July 10, 2024 and issues no new API keys, so it's a dead end for a new project. Its only real edge was convenience analytics (pre-computed party totals, member-vs-member vote/sponsorship comparisons) — none of which are core to EagleEye, and all of which can be computed client-side from Congress.gov data if ever wanted. ProPublica itself sourced bills from Congress.gov. Stay on Congress.gov (House votes, bills) + Senate.gov (Senate roll calls).
+- [ ] Add 3 tabs to the representative view. 1st tab is about (Committees, Bills, Contact info), 2nd tab is voting history (show the full title for each bill as it appears on the home feed, with an arrow to view the bills full details, should go to the same screen we end up on if tapped on from the home screen), 3rd tab should be the money tab the ("Beats the market"/ insider-trading / corruption meter), stock trades, top PAC funders,  top individual funders
 
 ---
 
@@ -66,9 +72,11 @@
 ## 0.6 — iOS integration
 - [ ] Add home screen widgets
 - [ ] Add system notifications for new bills being passed, maybe the ability to bookmark a bill to recieve all notifications about it. 
+
 ---
 
 ## Version 1.0
+Modify ReadME
 #### Release!
 
 
@@ -76,4 +84,5 @@
 ---
 
 ## ⚙️ Refactoring & Code Optimization
-#### None
+- [ ] Maybe make enacted laws have a higher waiting in the algorithm
+- [ ] Apple's location is sometimes vague (for privacy) and returns the wrong representative — let the user type in a ZIP code manually as a fallback (or as an option before we even ask for location)

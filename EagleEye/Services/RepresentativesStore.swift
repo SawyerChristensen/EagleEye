@@ -41,6 +41,9 @@ final class RepresentativesStore {
     private let service: CongressService
     private let geocoder: CensusGeocoder
     private let committeeService: CommitteeService
+    private let contactService: MemberContactService
+    private let financeService: OpenFECService
+    private let disclosureService: FinancialDisclosureService
 
     /// The last coordinate we successfully resolved a delegation for. Persisted
     /// so future launches can refresh without prompting for location again.
@@ -49,11 +52,17 @@ final class RepresentativesStore {
     init(
         service: CongressService = CongressService(),
         geocoder: CensusGeocoder = CensusGeocoder(),
-        committeeService: CommitteeService = CommitteeService()
+        committeeService: CommitteeService = CommitteeService(),
+        contactService: MemberContactService = MemberContactService(),
+        financeService: OpenFECService = OpenFECService(),
+        disclosureService: FinancialDisclosureService = FinancialDisclosureService()
     ) {
         self.service = service
         self.geocoder = geocoder
         self.committeeService = committeeService
+        self.contactService = contactService
+        self.financeService = financeService
+        self.disclosureService = disclosureService
 
         // If we resolved the delegation on a previous launch, show it right away
         // and skip the location prompt entirely.
@@ -92,7 +101,10 @@ final class RepresentativesStore {
                 representatives = await Self.enrichedProfiles(
                     for: delegation,
                     using: service,
-                    committeeService: committeeService
+                    committeeService: committeeService,
+                    contactService: contactService,
+                    financeService: financeService,
+                    disclosureService: disclosureService
                 )
                 cachedCoordinate = coordinate
                 Self.saveCache(coordinate: coordinate, representatives: representatives)
@@ -165,22 +177,47 @@ final class RepresentativesStore {
         return (senators + (houseMember.map { [$0] } ?? [])).sorted(by: delegationOrder)
     }
 
-    /// Fills in each member's profile: sponsored/cosponsored bills from
-    /// Congress.gov (fetched per member, concurrently) and committee assignments
-    /// from the shared committee dataset (fetched once for the whole delegation).
-    /// Both run concurrently and member order is preserved.
+    /// Fills in each member's profile: sponsored/cosponsored bills and office
+    /// contact details from Congress.gov and top funders from OpenFEC (fetched
+    /// per member, concurrently); committee assignments, social-media links, and
+    /// the FEC candidate crosswalk from shared datasets (each fetched once for the
+    /// whole delegation). Everything runs concurrently and member order is
+    /// preserved. Funders are skipped entirely unless an OpenFEC key is set.
     private static func enrichedProfiles(
         for delegation: [Representative],
         using service: CongressService,
-        committeeService: CommitteeService
+        committeeService: CommitteeService,
+        contactService: MemberContactService,
+        financeService: OpenFECService,
+        disclosureService: FinancialDisclosureService
     ) async -> [Representative] {
-        // Kick off the single committee-dataset fetch alongside the per-member
-        // bill lookups so they overlap.
+        // Kick off the shared single-dataset fetches (committees, social media,
+        // House trade disclosures, and — only when an FEC key is configured —
+        // the campaign-finance crosswalk) alongside the per-member lookups so
+        // they all overlap.
         async let assignments = committeeService.committeeAssignments()
+        async let socialLinks = contactService.socialLinksByBioguide()
+        async let houseReports = disclosureService.houseTransactionReports()
+        async let fecCandidates = financeService.isConfigured
+            ? financeService.candidateIDsByBioguide()
+            : [:]
 
         let billEnriched = await withTaskGroup(of: (Int, Representative).self) { group in
             for (index, rep) in delegation.enumerated() {
-                group.addTask { (index, await service.enrichedProfile(for: rep)) }
+                group.addTask {
+                    let enriched = await service.enrichedProfile(for: rep)
+                    let office = await contactService.officeInfo(forBioguideID: rep.bioguideID)
+                    // Stash the office fields on `contact` for now; social links
+                    // are folded in below once the shared dataset resolves.
+                    let withOffice = office.map {
+                        enriched.withContact(ContactInfo(
+                            officeAddress: $0.officeAddress,
+                            phone: $0.phone,
+                            website: $0.website
+                        ))
+                    }
+                    return (index, withOffice ?? enriched)
+                }
             }
             var enriched = delegation
             for await (index, rep) in group {
@@ -190,12 +227,56 @@ final class RepresentativesStore {
         }
 
         let committeesByID = await assignments
-        return billEnriched.map { rep in
-            guard let id = rep.bioguideID,
-                  let committees = committeesByID[id], !committees.isEmpty else {
-                return rep
+        let socialByID = await socialLinks
+        let candidatesByID = await fecCandidates
+        let reports = await houseReports
+
+        // Look up each member's top funders concurrently, keyed off the FEC
+        // crosswalk. Skipped entirely (empty crosswalk) when no key is set.
+        let fundersByIndex = await withTaskGroup(of: (Int, [Funder]).self) { group in
+            for (index, rep) in billEnriched.enumerated() {
+                guard let id = rep.bioguideID,
+                      let candidateIDs = candidatesByID[id], !candidateIDs.isEmpty else {
+                    continue
+                }
+                group.addTask {
+                    (index, await financeService.topFunders(
+                        candidateIDs: candidateIDs, office: rep.office
+                    ))
+                }
             }
-            return rep.withCommittees(committees)
+            var collected: [Int: [Funder]] = [:]
+            for await (index, funders) in group {
+                collected[index] = funders
+            }
+            return collected
+        }
+
+        return billEnriched.enumerated().map { index, rep in
+            let funders = fundersByIndex[index] ?? []
+            var rep = funders.isEmpty ? rep : rep.withFunders(funders)
+            rep = rep.withTradingActivity(
+                disclosureService.tradingActivity(for: rep, houseReports: reports)
+            )
+            let withCommittees: Representative = {
+                guard let id = rep.bioguideID,
+                      let committees = committeesByID[id], !committees.isEmpty else {
+                    return rep
+                }
+                return rep.withCommittees(committees)
+            }()
+
+            // Fold the per-member office details already loaded above together
+            // with this member's social links into one ContactInfo.
+            let social = rep.bioguideID.flatMap { socialByID[$0] } ?? []
+            let office = withCommittees.contact
+            let contact = ContactInfo(
+                officeAddress: office?.officeAddress,
+                phone: office?.phone,
+                website: office?.website,
+                socialLinks: social
+            )
+            return contact.hasContent ? withCommittees.withContact(contact) : withCommittees
         }
     }
 

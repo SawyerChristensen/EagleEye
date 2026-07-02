@@ -23,7 +23,7 @@ enum SampleData {
                 chamber: .house,
                 status: .passedHouse,
                 latestActionDate: daysAgo(1),
-                topics: ["Energy", "Environment", "Taxes"]
+                topics: ["Energy"]
             ),
             Bill(
                 title: "S. 920 — Veterans Mental Health Access Act",
@@ -31,7 +31,7 @@ enum SampleData {
                 chamber: .senate,
                 status: .inCommittee,
                 latestActionDate: daysAgo(2),
-                topics: ["Veterans", "Healthcare"]
+                topics: ["Armed Forces and National Security"]
             ),
             Bill(
                 title: "H.R. 305 — Small Business Relief & Fairness Act",
@@ -39,7 +39,7 @@ enum SampleData {
                 chamber: .house,
                 status: .introduced,
                 latestActionDate: daysAgo(3),
-                topics: ["Economy", "Small Business"]
+                topics: ["Commerce"]
             ),
             Bill(
                 title: "S. 1156 — Coastal Resilience Funding Act",
@@ -47,7 +47,7 @@ enum SampleData {
                 chamber: .senate,
                 status: .passedSenate,
                 latestActionDate: daysAgo(5),
-                topics: ["Infrastructure", "Environment"]
+                topics: ["Water Resources Development"]
             ),
             Bill(
                 title: "H.R. 77 — Digital Privacy Protection Act",
@@ -55,7 +55,7 @@ enum SampleData {
                 chamber: .house,
                 status: .toPresident,
                 latestActionDate: daysAgo(6),
-                topics: ["Technology", "Privacy"]
+                topics: ["Science, Technology, Communications"]
             ),
             Bill(
                 title: "S. 64 — Rural Broadband Expansion Act",
@@ -63,7 +63,7 @@ enum SampleData {
                 chamber: .senate,
                 status: .enacted,
                 latestActionDate: daysAgo(9),
-                topics: ["Infrastructure", "Technology"]
+                topics: ["Transportation and Public Works"]
             ),
         ]
     }()
