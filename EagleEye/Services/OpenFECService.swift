@@ -97,6 +97,30 @@ struct OpenFECService {
         )
     }
 
+    /// Loads the member's top *individual* contributors, grouped the way voters
+    /// think of them: by the employer whose staff gave the most (labeled
+    /// "Employees", since federal law bars the company itself from donating), and
+    /// — for the self-employed and independents who list no employer — by
+    /// occupation (e.g. "Attorneys"). Returns an empty list under the same
+    /// conditions as `topFunders`.
+    func topIndividualFunders(
+        candidateIDs: [String],
+        office: Office,
+        limit: Int = 6
+    ) async -> [Funder] {
+        guard isConfigured,
+              let candidateID = Self.candidateID(matching: office, from: candidateIDs),
+              let committee = await principalCommittee(forCandidate: candidateID) else {
+            return []
+        }
+
+        return await topIndividualContributions(
+            committeeID: committee.id,
+            period: committee.latestCycle,
+            limit: limit
+        )
+    }
+
     // MARK: - Candidate → committee
 
     /// Picks the FEC candidate ID for the member's current chamber. FEC IDs are
@@ -180,6 +204,104 @@ struct OpenFECService {
             // The section footnote explains these are PACs, so the per-row
             // category is left blank rather than repeating "PAC" on every line.
             .map { Funder(name: $0.display, amount: Int($0.total.rounded()), category: "") }
+    }
+
+    /// Employer/occupation values that carry no useful grouping — the donor is
+    /// their own boss, out of the workforce, or simply declined to say. Compared
+    /// against the uppercased, trimmed field.
+    private static let uninformativeAffiliations: Set<String> = [
+        "", "SELF", "SELF-EMPLOYED", "SELF EMPLOYED", "SELFEMPLOYED", "NONE",
+        "N/A", "NA", "NOT EMPLOYED", "NOT-EMPLOYED", "UNEMPLOYED", "RETIRED",
+        "HOMEMAKER", "INFORMATION REQUESTED", "INFORMATION REQUESTED PER BEST EFFORTS",
+        "REQUESTED", "REFUSED", "UNKNOWN",
+    ]
+
+    /// Loads the member's top individual contributors, aggregated by the employer
+    /// or occupation they listed.
+    ///
+    /// Individuals must be itemized by name, so the meaningful unit is the group
+    /// they belong to — the standard way campaign-finance trackers surface "top
+    /// contributors". Each row's employer is preferred (its staff, hence the
+    /// "Employees" label); when that's missing or generic, the occupation stands
+    /// in and is pluralized for display (e.g. "Attorney" → "Attorneys"). Rows
+    /// with neither are dropped.
+    private func topIndividualContributions(committeeID: String, period: Int, limit: Int) async -> [Funder] {
+        guard let response = try? await getJSON(
+            ScheduleAResponse.self,
+            path: "schedules/schedule_a",
+            queryItems: [
+                URLQueryItem(name: "committee_id", value: committeeID),
+                URLQueryItem(name: "two_year_transaction_period", value: String(period)),
+                URLQueryItem(name: "is_individual", value: "true"),
+                URLQueryItem(name: "sort", value: "-contribution_receipt_amount"),
+                URLQueryItem(name: "per_page", value: "100"),
+            ]
+        ) else {
+            return []
+        }
+
+        var merged: [String: (display: String, isEmployer: Bool, total: Double)] = [:]
+        for row in response.results {
+            guard let amount = row.amount, amount > 0 else { continue }
+
+            let employer = row.contributorEmployer?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let occupation = row.contributorOccupation?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+            let group: (key: String, display: String, isEmployer: Bool)
+            if !Self.uninformativeAffiliations.contains(employer.uppercased()) {
+                group = ("EMP:\(employer.uppercased())", Self.titleCased(employer), true)
+            } else if !Self.uninformativeAffiliations.contains(occupation.uppercased()) {
+                group = ("OCC:\(occupation.uppercased())", Self.pluralized(Self.titleCased(occupation)), false)
+            } else {
+                continue
+            }
+
+            let existing = merged[group.key]
+            merged[group.key] = (
+                display: existing?.display ?? group.display,
+                isEmployer: group.isEmployer,
+                total: (existing?.total ?? 0) + amount
+            )
+        }
+
+        return merged.values
+            .sorted { $0.total > $1.total }
+            .prefix(limit)
+            // Employer groups are the company's staff; occupation groups already
+            // read as a plural noun, so they need no subtitle.
+            .map { Funder(
+                name: $0.display,
+                amount: Int($0.total.rounded()),
+                category: $0.isEmployer ? "Employees of" : ""
+            ) }
+    }
+
+    /// Pluralizes a single occupation noun for display using basic English
+    /// rules — enough for the short, common titles the FEC records (e.g.
+    /// "Attorney" → "Attorneys", "Physician" → "Physicians", "Business" →
+    /// "Businesses"). Multi-word titles are pluralized on their final word.
+    private static func pluralized(_ noun: String) -> String {
+        guard let lastSpace = noun.lastIndex(of: " ") else {
+            return pluralizeWord(noun)
+        }
+        let head = noun[..<noun.index(after: lastSpace)]
+        let tail = String(noun[noun.index(after: lastSpace)...])
+        return head + pluralizeWord(tail)
+    }
+
+    private static func pluralizeWord(_ word: String) -> String {
+        guard let last = word.last else { return word }
+        let lower = word.lowercased()
+        if lower.hasSuffix("s") || lower.hasSuffix("x") || lower.hasSuffix("z")
+            || lower.hasSuffix("ch") || lower.hasSuffix("sh") {
+            return word + "es"
+        }
+        // Consonant + "y" becomes "ies" ("Attorney" keeps its vowel-"y" and just
+        // gains an "s").
+        if last == "y", let penult = word.dropLast().last, !"aeiou".contains(penult.lowercased()) {
+            return word.dropLast() + "ies"
+        }
+        return word + "s"
     }
 
     /// Renders an all-caps FEC employer name (e.g. "GOOGLE INC") as title case
@@ -289,12 +411,18 @@ private struct ScheduleAResponse: Decodable {
         let contributorId: String?
         /// The contributor's FEC entity type, e.g. "PAC", "COM", "ORG", "IND".
         let entityType: String?
+        /// For individual contributors, the employer and occupation they listed,
+        /// used to group donations into "top contributors".
+        let contributorEmployer: String?
+        let contributorOccupation: String?
         let amount: Double?
 
         enum CodingKeys: String, CodingKey {
             case contributorName = "contributor_name"
             case contributorId = "contributor_id"
             case entityType = "entity_type"
+            case contributorEmployer = "contributor_employer"
+            case contributorOccupation = "contributor_occupation"
             case amount = "contribution_receipt_amount"
         }
     }

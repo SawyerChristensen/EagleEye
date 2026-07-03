@@ -115,11 +115,15 @@ struct SenateService {
             return nil
         }
 
+        let measure = Self.measure(from: vote.issue)
         return VoteRecord(
             billTitle: await title(for: vote, detail: detail),
             position: Self.position(fromCast: member.voteCast),
             date: detail.date ?? Date(),
-            question: vote.question
+            question: vote.question,
+            congress: currentCongress,
+            type: measure?.type,
+            number: measure?.number
         )
     }
 

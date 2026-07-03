@@ -2,15 +2,27 @@
 //  RepresentativeDetailView.swift
 //  EagleEye
 //
-//  Profile screen shown when a representative is tapped in the grid.
-//  Several sections use placeholder data until the relevant APIs
-//  (e.g. Congress.gov for votes/bills, OpenSecrets for funding) are wired up.
+//  Profile screen shown when a representative is tapped in the grid. The profile
+//  is split into three tabs — About, Votes, and Money — selected with a
+//  segmented control below the header. Several sections use placeholder data
+//  until the relevant APIs (e.g. a trading-performance source) are wired up.
 //
 
 import SwiftUI
 
 struct RepresentativeDetailView: View {
     let representative: Representative
+
+    /// The three top-level sections of a member's profile.
+    private enum ProfileTab: String, CaseIterable, Identifiable {
+        case about = "About"
+        case votes = "Votes"
+        case money = "Money"
+
+        var id: Self { self }
+    }
+
+    @State private var selectedTab: ProfileTab = .about
 
     private var partyColor: Color {
         switch representative.party {
@@ -25,12 +37,26 @@ struct RepresentativeDetailView: View {
             VStack(alignment: .leading, spacing: 24) {
                 header
 
-                contactSection
-                committeesSection
-                sponsorshipSection
-                votingHistorySection
-                fundingSection
-                tradingSection
+                Picker("Section", selection: $selectedTab) {
+                    ForEach(ProfileTab.allCases) { tab in
+                        Text(tab.rawValue).tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                switch selectedTab {
+                case .about:
+                    committeesSection
+                    sponsorshipSection
+                    contactSection
+                case .votes:
+                    votingHistorySection
+                case .money:
+                    marketMeterSection
+                    tradingSection
+                    pacFundersSection
+                    individualFundersSection
+                }
             }
             .padding()
         }
@@ -58,7 +84,31 @@ struct RepresentativeDetailView: View {
         .frame(maxWidth: .infinity)
     }
 
-    // MARK: - Sections
+    // MARK: - About tab
+
+    private var committeesSection: some View {
+        ProfileSection(title: "Committees", systemImage: "person.3") {
+            if representative.committees.isEmpty {
+                EmptyNote("No committee assignments on record.")
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(representative.committees, id: \.self) { committee in
+                        Text("• \(committee)")
+                            .font(.body)
+                    }
+                }
+            }
+        }
+    }
+
+    private var sponsorshipSection: some View {
+        ProfileSection(title: "Bills", systemImage: "doc.text") {
+            VStack(alignment: .leading, spacing: 14) {
+                BillGroup(title: "Sponsored", bills: representative.sponsoredBills)
+                BillGroup(title: "Cosponsored", bills: representative.cosponsoredBills)
+            }
+        }
+    }
 
     /// Office address, phone, website, and social links. Hidden entirely until
     /// contact details have loaded so the profile doesn't show an empty card.
@@ -100,49 +150,32 @@ struct RepresentativeDetailView: View {
         return digits.isEmpty ? nil : URL(string: "tel:\(digits)")
     }
 
-    private var committeesSection: some View {
-        ProfileSection(title: "Committees", systemImage: "person.3") {
-            if representative.committees.isEmpty {
-                EmptyNote("No committee assignments on record.")
+    // MARK: - Votes tab
+
+    /// The member's recent floor votes. Each row shows the measure's full title
+    /// (as it appears in the home feed) and, when the bill can be resolved, links
+    /// to the same detail screen the feed opens.
+    private var votingHistorySection: some View {
+        ProfileSection(title: "Voting History", systemImage: "checklist") {
+            if representative.keyVotes.isEmpty {
+                EmptyNote("No recent votes on record.")
             } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(representative.committees, id: \.self) { committee in
-                        Text("• \(committee)")
-                            .font(.body)
+                VStack(spacing: 14) {
+                    ForEach(representative.keyVotes, id: \.self) { vote in
+                        VoteRow(vote: vote)
                     }
                 }
             }
         }
     }
 
-    private var sponsorshipSection: some View {
-        ProfileSection(title: "Bills", systemImage: "doc.text") {
-            VStack(alignment: .leading, spacing: 14) {
-                BillGroup(title: "Sponsored", bills: representative.sponsoredBills)
-                BillGroup(title: "Cosponsored", bills: representative.cosponsoredBills)
-            }
-        }
-    }
+    // MARK: - Money tab
 
-    private var votingHistorySection: some View {
-        ProfileSection(title: "Voting History", systemImage: "checklist") {
-            if representative.keyVotes.isEmpty {
-                EmptyNote("No recent votes on record.")
-            } else if representative.keyVotes.count > 3 {
-                Collapsible(collapsedHeight: 160, accessibilityNoun: "votes") {
-                    voteRows
-                }
-            } else {
-                voteRows
-            }
-        }
-    }
-
-    private var voteRows: some View {
-        VStack(spacing: 12) {
-            ForEach(representative.keyVotes, id: \.self) { vote in
-                VoteRow(vote: vote)
-            }
+    /// Placeholder for the planned trading-performance / conflict-of-interest
+    /// meter, which needs a historical-price data source not yet wired up.
+    private var marketMeterSection: some View {
+        ProfileSection(title: "Beats the Market", systemImage: "gauge.medium") {
+            EmptyNote("A trading-performance and conflict-of-interest score is coming once historical price data is wired up.")
         }
     }
 
@@ -190,8 +223,8 @@ struct RepresentativeDetailView: View {
         }
     }
 
-    private var fundingSection: some View {
-        ProfileSection(title: "Top Funders", systemImage: "dollarsign.circle") {
+    private var pacFundersSection: some View {
+        ProfileSection(title: "Top PAC Funders", systemImage: "dollarsign.circle") {
             if representative.funders.isEmpty {
                 EmptyNote("Funding data unavailable.")
             } else {
@@ -200,6 +233,25 @@ struct RepresentativeDetailView: View {
                         FunderRow(funder: funder)
                     }
                     Text("Direct contributions from each organization's political action committee (PAC). Federal law bars companies and unions from donating to candidates directly.")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .padding(.top, 2)
+                }
+            }
+        }
+    }
+
+    /// Top individual contributors, grouped by employer or occupation.
+    private var individualFundersSection: some View {
+        ProfileSection(title: "Top Individual Funders", systemImage: "person.2") {
+            if representative.individualFunders.isEmpty {
+                EmptyNote("Individual contributor data unavailable.")
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(representative.individualFunders, id: \.self) { funder in
+                        FunderRow(funder: funder)
+                    }
+                    Text("Individual donations totaled by the employer or occupation each contributor reported. \"Employees\" means staff of that organization gave personally — the organization itself cannot.")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                         .padding(.top, 2)
@@ -365,6 +417,9 @@ private struct Collapsible<Content: View>: View {
     }
 }
 
+/// A single vote in the voting-history tab. Shows the measure's full title, the
+/// date, and how the member voted. When the bill can be resolved the whole row
+/// links to its detail screen — the same one the home feed opens.
 private struct VoteRow: View {
     let vote: VoteRecord
 
@@ -378,23 +433,41 @@ private struct VoteRow: View {
     }
 
     var body: some View {
+        if let ref = vote.legislationRef {
+            NavigationLink(value: ref) {
+                content(showChevron: true)
+            }
+            .buttonStyle(.plain)
+        } else {
+            content(showChevron: false)
+        }
+    }
+
+    private func content(showChevron: Bool) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(vote.billTitle)
                     .font(.subheadline)
-                    .lineLimit(2)
-                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 Text(vote.date, format: .dateTime.month().day().year())
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Spacer(minLength: 8)
+
             Text(vote.position.rawValue)
                 .font(.caption.bold())
                 .foregroundStyle(color)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
                 .background(color.opacity(0.15), in: .capsule)
+
+            if showChevron {
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 4)
+            }
         }
     }
 }

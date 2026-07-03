@@ -116,7 +116,7 @@ enum PolicyArea: String, CaseIterable {
         case .publicLands: "mountain.2"
         case .science: "antenna.radiowaves.left.and.right"
         case .socialSciences: "book"
-        case .socialWelfare: "hands.sparkles"
+        case .socialWelfare: "heart.text.square"
         case .sports: "sportscourt"
         case .taxation: "percent"
         case .transportation: "bus"
@@ -375,20 +375,28 @@ extension Bill {
         }
     }
 
+    /// How much legislative progress can boost a bill over fresher activity. Held
+    /// below recency's full 0–1 range so an advanced bill leads its same-age peers
+    /// and can outrank slightly newer, less-advanced ones — but can't leap over
+    /// genuinely recent activity. At 0.5, a passed bill carries roughly a one-week
+    /// recency head start over a bill still in committee, no more.
+    private static let progressInfluence = 0.5
+
     /// A ranking score that surfaces consequential, *active* legislation first:
     /// it rises with how far the bill has advanced and decays as its most recent
     /// action ages. A bill near the President's desk outranks one stuck in
-    /// committee, but a long-dormant bill sinks beneath fresher activity.
+    /// committee of similar vintage, but a long-dormant bill sinks beneath fresher
+    /// activity — a passed bill from last week no longer leaps over a committee
+    /// action from a few days ago.
     func importance(asOf now: Date = Date()) -> Double {
         let days = max(0, now.timeIntervalSince(latestActionDate) / 86_400)
         // Exponential decay with a roughly three-week time constant.
         let recency = exp(-days / 21)
-        // Blend legislative progress with recency in roughly equal measure: a
-        // bill near the President's desk outranks one stuck in committee, but a
-        // long-dormant advanced bill sinks beneath fresher activity. This keeps
-        // a healthy mix of stages in the feed rather than letting enacted laws
-        // crowd out recent committee and introduced bills.
-        return progressWeight + recency
+        // Recency leads; progress is a bounded boost on top. Weighting progress
+        // below recency's range keeps a healthy mix of stages in the feed and
+        // lets genuinely recent activity rise, rather than letting older advanced
+        // bills crowd out this week's committee and introduced action.
+        return Self.progressInfluence * progressWeight + recency
     }
 }
 

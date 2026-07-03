@@ -40,14 +40,17 @@
 - [x] Office contact information in the profile
   - [x] Link to their social media
   - [x] Add icons in the pill of each social media link
-- [x] Top Funders *(OpenFEC API — needs a free api.data.gov key in Secrets.plist as `OpenFECAPIKey`)*
+- [x] Top Funders *(OpenFEC API — needs a free api.data.gov key in Secrets.plist as `OpenFECAPIKey`)\*
+- [x] change the initial location screen to ask if the user wants to share their location or enter a zipcode. if they tap find, then ask iOS for the system prompt
+- [x] When finding initial locatin, it displays the sample data in the representatives view. it should be blank until the real representatives load in
+- [ ] Inlcude recent bills that failed in the feed, so you can see if your senator or representative voted against something you wouldve supported.
+  - [ ] Prioritize recent bills in this priority: 1) recently enacted, 2) recently failed but passed one chamber 3) passed one chamber 4) recently failed but passed committee 5) passed committe 6) introduced and update the progress pills accordingly
 - [ ] "Beats the market" / insider-trading / corruption meter *(needs a trading-disclosure data source)*
   - [x] Trading-activity indicator — House Periodic Transaction Report (PTR) count for the past year, latest-filing date, and a link to the filing, from the free House Clerk disclosure index (on-device ZIP + TSV parsing, no key). Senators link out to the Senate eFD portal.
   - [ ] Senate coverage — parse efdsearch.senate.gov (agreement + CSRF + DataTables JSON) for senators' PTRs
   - [ ] "Beats the market" quantitative metric — parse each PTR PDF into transactions (ticker, buy/sell, amount range, date) + pull historical prices to compute returns vs. a benchmark *(realistically a backend job, not on-device)*
-- [x] Evaluate ProPublica API for voting records and sponsored bills — is it needed on top of Congress.gov?
-  - **Verdict: No — don't adopt it.** ProPublica's Congress API was sunset ~July 10, 2024 and issues no new API keys, so it's a dead end for a new project. Its only real edge was convenience analytics (pre-computed party totals, member-vs-member vote/sponsorship comparisons) — none of which are core to EagleEye, and all of which can be computed client-side from Congress.gov data if ever wanted. ProPublica itself sourced bills from Congress.gov. Stay on Congress.gov (House votes, bills) + Senate.gov (Senate roll calls).
-- [ ] Add 3 tabs to the representative view. 1st tab is about (Committees, Bills, Contact info), 2nd tab is voting history (show the full title for each bill as it appears on the home feed, with an arrow to view the bills full details, should go to the same screen we end up on if tapped on from the home screen), 3rd tab should be the money tab the ("Beats the market"/ insider-trading / corruption meter), stock trades, top PAC funders,  top individual funders
+- [x] Add 3 tabs to the representative view. 1st tab is about (Committees, Bills, Contact info), 2nd tab is voting history (show the full title for each bill as it appears on the home feed, with an arrow to view the bills full details, should go to the same screen we end up on if tapped on from the home screen), 3rd tab should be the money tab the ("Beats the market"/ insider-trading / corruption meter), stock trades, top PAC funders,  top individual funders
+  - [x] Add top individual funders, specify they are employees if the category is a company. if "Attorney" expand to plural form ie "Attornies"
 
 ---
 
@@ -85,4 +88,4 @@ Modify ReadME
 
 ## ⚙️ Refactoring & Code Optimization
 - [ ] Maybe make enacted laws have a higher waiting in the algorithm
-- [ ] Apple's location is sometimes vague (for privacy) and returns the wrong representative — let the user type in a ZIP code manually as a fallback (or as an option before we even ask for location)
+- [x] Apple's location is sometimes vague (for privacy) and returns the wrong representative — let the user type in a ZIP code manually as a fallback (or as an option before we even ask for location)

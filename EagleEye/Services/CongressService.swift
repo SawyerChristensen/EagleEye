@@ -319,7 +319,10 @@ struct CongressService {
             billTitle: Bill.displayTitle(type: vote.legislationType, number: vote.legislationNumber, title: name),
             position: Self.position(fromCast: member.voteCast),
             date: Self.parseVoteDate(vote.startDate) ?? Date(),
-            question: Self.question(for: vote)
+            question: Self.question(for: vote),
+            congress: Self.currentCongress,
+            type: vote.legislationType,
+            number: vote.legislationNumber
         )
     }
 
@@ -593,12 +596,14 @@ struct CongressService {
         }
 
         // The list endpoint can only sort by updateDate (when a record was last
-        // touched), not by latest *action*. Many recently-updated records carry
-        // old actions, so a shallow fetch fills with administratively-touched
-        // bills and hides ones with genuinely recent floor activity. Pull a
-        // deeper pool, rank it by importance, then enrich only the bills we'll
-        // actually show — keeping detail-request volume bounded.
-        let poolLimit = min(250, max(limit * 5, 100))
+        // touched), not by latest *action*. Worse, Congress.gov periodically runs
+        // bulk administrative updates that re-stamp hundreds of stale records with
+        // a fresh updateDate, flooding the top of the sorted list with bills whose
+        // real actions are weeks old. A shallow fetch fills entirely with that
+        // flood and buries genuinely recent floor activity past the ceiling, so we
+        // pull the full 250-record page Congress.gov allows, rank it by importance,
+        // then enrich only the bills we'll show — keeping detail volume bounded.
+        let poolLimit = min(250, max(limit * 5, 250))
 
         var components = URLComponents(
             string: "https://api.congress.gov/v3/bill/\(Self.currentCongress)"

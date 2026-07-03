@@ -105,6 +105,11 @@ enum SampleData {
                     Funder(name: "Renewable Energy PAC", amount: 412_000, category: "Energy"),
                     Funder(name: "Tech Workers United", amount: 305_500, category: "Technology"),
                     Funder(name: "Education Association", amount: 188_200, category: "Education"),
+                ],
+                individualFunders: [
+                    Funder(name: "University Of California", amount: 128_400, category: "Employees"),
+                    Funder(name: "Attorneys", amount: 74_900, category: ""),
+                    Funder(name: "Alphabet", amount: 61_250, category: "Employees"),
                 ]
             ),
             Representative(

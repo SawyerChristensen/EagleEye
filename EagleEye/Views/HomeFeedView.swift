@@ -24,6 +24,11 @@ struct HomeFeedView: View {
                             NavigationLink(value: bill) {
                                 BillRow(bill: bill)
                             }
+                            // Pin the row separator to the leading edge so it
+                            // spans the full width; otherwise SwiftUI insets it
+                            // to align with the row's content and it only covers
+                            // the right portion of the screen.
+                            .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
                         }
                     }
                     .listStyle(.plain)
@@ -37,7 +42,7 @@ struct HomeFeedView: View {
                     FeedStatusBanner(text: statusMessage)
                 }
             }
-            .navigationTitle("Congress")
+            .navigationTitle("Recent Bills")
             .navigationDestination(for: Bill.self) { bill in
                 BillDetailView(bill: bill)
             }

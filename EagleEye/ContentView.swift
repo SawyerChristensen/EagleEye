@@ -24,8 +24,9 @@ struct ContentView: View {
         case .locating, .denied:
             LocationPromptView(
                 isDenied: store.loadState == .denied,
+                statusMessage: store.statusMessage,
                 onRequestLocation: resolveLocation,
-                onUseSampleData: store.continueWithSampleData
+                onSubmitZIP: store.loadDelegation(forZIP:)
             )
         case .loading, .ready:
             mainTabs
@@ -47,7 +48,10 @@ struct ContentView: View {
         TabView(selection: $selection) {
             // Left tab: the user's congressional delegation.
             Tab("Your Reps", systemImage: "person.2", value: .representatives) {
-                RepresentativesView(representatives: store.representatives)
+                RepresentativesView(
+                    representatives: store.representatives,
+                    isLoading: store.loadState == .loading
+                )
             }
 
             // Center tab: the home feed of bills in Congress.

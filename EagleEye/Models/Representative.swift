@@ -42,12 +42,37 @@ struct VoteRecord: Codable, Hashable {
     /// The specific floor question, e.g. "On Passage" — surfaced when a vote is
     /// tapped for detail. `nil` for placeholder sample data.
     let question: String?
+    /// Identifiers for the measure voted on, used to open its detail screen from
+    /// the voting-history tab. `nil` for placeholder sample data.
+    let congress: Int?
+    let type: String?
+    let number: String?
 
-    init(billTitle: String, position: VotePosition, date: Date, question: String? = nil) {
+    init(
+        billTitle: String,
+        position: VotePosition,
+        date: Date,
+        question: String? = nil,
+        congress: Int? = nil,
+        type: String? = nil,
+        number: String? = nil
+    ) {
         self.billTitle = billTitle
         self.position = position
         self.date = date
         self.question = question
+        self.congress = congress
+        self.type = type
+        self.number = number
+    }
+
+    /// A navigable reference to the measure voted on, so a vote row can open the
+    /// same bill-detail screen the home feed does. `nil` when the identifiers
+    /// needed to load the bill aren't available.
+    var legislationRef: LegislationRef? {
+        guard let congress, let type, !type.isEmpty,
+              let number, !number.isEmpty else { return nil }
+        return LegislationRef(congress: congress, type: type, number: number, title: billTitle)
     }
 }
 
@@ -226,8 +251,11 @@ struct Representative: Identifiable, Codable, Hashable {
     let sponsoredBills: [LegislationRef]
     /// Bills the member cosponsored.
     let cosponsoredBills: [LegislationRef]
-    /// Top campaign funders (placeholder until a finance API is wired up).
+    /// Top campaign funders — the organizations whose PACs gave most directly.
     let funders: [Funder]
+    /// Top individual contributors, grouped by employer (labeled "Employees")
+    /// or, for the self-employed and independents, by occupation.
+    let individualFunders: [Funder]
     /// Office address, phone, website, and social links; `nil` until loaded.
     let contact: ContactInfo?
     /// Stock-trade disclosure summary; `nil` until loaded.
@@ -258,6 +286,7 @@ struct Representative: Identifiable, Codable, Hashable {
             sponsoredBills: sponsored,
             cosponsoredBills: cosponsored,
             funders: funders,
+            individualFunders: individualFunders,
             contact: contact,
             tradingActivity: tradingActivity
         )
@@ -283,6 +312,7 @@ struct Representative: Identifiable, Codable, Hashable {
             sponsoredBills: sponsoredBills,
             cosponsoredBills: cosponsoredBills,
             funders: funders,
+            individualFunders: individualFunders,
             contact: contact,
             tradingActivity: tradingActivity
         )
@@ -308,14 +338,16 @@ struct Representative: Identifiable, Codable, Hashable {
             sponsoredBills: sponsoredBills,
             cosponsoredBills: cosponsoredBills,
             funders: funders,
+            individualFunders: individualFunders,
             contact: contact,
             tradingActivity: tradingActivity
         )
     }
 
-    /// Returns a copy with the top-funders list replaced, used to fill in that
-    /// profile section after the member's campaign finance data is loaded.
-    func withFunders(_ funders: [Funder]) -> Representative {
+    /// Returns a copy with the PAC and individual funder lists replaced, used to
+    /// fill in those profile sections after the member's campaign finance data is
+    /// loaded from OpenFEC.
+    func withFunders(pac: [Funder], individual: [Funder]) -> Representative {
         Representative(
             id: id,
             name: name,
@@ -332,7 +364,8 @@ struct Representative: Identifiable, Codable, Hashable {
             keyVotes: keyVotes,
             sponsoredBills: sponsoredBills,
             cosponsoredBills: cosponsoredBills,
-            funders: funders,
+            funders: pac,
+            individualFunders: individual,
             contact: contact,
             tradingActivity: tradingActivity
         )
@@ -358,6 +391,7 @@ struct Representative: Identifiable, Codable, Hashable {
             sponsoredBills: sponsoredBills,
             cosponsoredBills: cosponsoredBills,
             funders: funders,
+            individualFunders: individualFunders,
             contact: contact,
             tradingActivity: tradingActivity
         )
@@ -383,6 +417,7 @@ struct Representative: Identifiable, Codable, Hashable {
             sponsoredBills: sponsoredBills,
             cosponsoredBills: cosponsoredBills,
             funders: funders,
+            individualFunders: individualFunders,
             contact: contact,
             tradingActivity: tradingActivity
         )
@@ -429,6 +464,7 @@ struct Representative: Identifiable, Codable, Hashable {
         sponsoredBills: [LegislationRef] = [],
         cosponsoredBills: [LegislationRef] = [],
         funders: [Funder] = [],
+        individualFunders: [Funder] = [],
         contact: ContactInfo? = nil,
         tradingActivity: TradingActivity? = nil
     ) {
@@ -448,6 +484,7 @@ struct Representative: Identifiable, Codable, Hashable {
         self.sponsoredBills = sponsoredBills
         self.cosponsoredBills = cosponsoredBills
         self.funders = funders
+        self.individualFunders = individualFunders
         self.contact = contact
         self.tradingActivity = tradingActivity
     }

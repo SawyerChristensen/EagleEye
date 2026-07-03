@@ -9,6 +9,9 @@ import SwiftUI
 
 struct RepresentativesView: View {
     let representatives: [Representative]
+    /// True while the delegation is being resolved and there's nothing to show
+    /// yet, so the grid shows a spinner instead of a blank screen.
+    var isLoading: Bool = false
 
     private var senators: [Representative] {
         representatives.filter { $0.office == .senator }
@@ -25,24 +28,30 @@ struct RepresentativesView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    ForEach(rows.indices, id: \.self) { index in
-                        HStack(spacing: 0) {
-                            ForEach(rows[index]) { rep in
-                                NavigationLink(value: rep) {
-                                    RepresentativeCell(representative: rep)
+            Group {
+                if representatives.isEmpty && isLoading {
+                    ProgressView("Finding your representatives…")
+                } else {
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            ForEach(rows.indices, id: \.self) { index in
+                                HStack(spacing: 0) {
+                                    ForEach(rows[index]) { rep in
+                                        NavigationLink(value: rep) {
+                                            RepresentativeCell(representative: rep)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .frame(maxWidth: .infinity)
+                                    }
                                 }
-                                .buttonStyle(.plain)
-                                .frame(maxWidth: .infinity)
                             }
                         }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 12)
                     }
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 12)
             }
-            .navigationTitle("Your Reps")
+            .navigationTitle("Your Representatives")
             .navigationDestination(for: Representative.self) { rep in
                 RepresentativeDetailView(representative: rep)
             }

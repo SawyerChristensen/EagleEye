@@ -64,6 +64,15 @@ final class RepresentativesStore {
         self.financeService = financeService
         self.disclosureService = disclosureService
 
+        #if DEBUG
+        // Pass "-ResetDelegationCache" as a launch argument in the Run scheme to
+        // wipe the cached delegation on startup, so the location prompt shows
+        // again without deleting the app. Off unless the argument is present.
+        if ProcessInfo.processInfo.arguments.contains("-ResetDelegationCache") {
+            UserDefaults.standard.removeObject(forKey: Self.cacheKey)
+        }
+        #endif
+
         // If we resolved the delegation on a previous launch, show it right away
         // and skip the location prompt entirely.
         if let cache = Self.loadCache(), !cache.representatives.isEmpty {
@@ -85,6 +94,10 @@ final class RepresentativesStore {
     /// refresh never flashes a spinner or wipes out good data.
     func loadDelegation(at coordinate: CLLocationCoordinate2D, silent: Bool = false) async {
         if !silent {
+            // Clear any stale delegation (e.g. sample data shown after a
+            // decline) so the grid is blank while we resolve the real members,
+            // rather than flashing the previous list during the fetch.
+            representatives = []
             loadState = .loading
             statusMessage = nil
         }
@@ -138,21 +151,38 @@ final class RepresentativesStore {
         await loadDelegation(at: coordinate, silent: true)
     }
 
-    /// Records that location access was denied and shows sample data so the app
-    /// remains usable.
-    func locationAccessDenied() {
-        representatives = SampleData.representatives
-        statusMessage = "Showing sample data — share your location to see your own representatives."
-        loadState = .denied
+    /// Resolves a five-digit U.S. ZIP code to a coordinate and loads the
+    /// delegation there. This is the manual fallback for when device location is
+    /// unavailable, denied, or too vague to pin down the right district.
+    func loadDelegation(forZIP zip: String) async {
+        let trimmed = zip.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count == 5, trimmed.allSatisfy(\.isNumber) else {
+            statusMessage = "Enter a valid 5-digit ZIP code."
+            return
+        }
+
+        loadState = .loading
+        statusMessage = nil
+
+        do {
+            // Constrain to a U.S. postal code so a bare number geocodes reliably.
+            let placemarks = try await CLGeocoder().geocodeAddressString("\(trimmed), USA")
+            guard let coordinate = placemarks.first?.location?.coordinate else {
+                throw CLError(.geocodeFoundNoResult)
+            }
+            await loadDelegation(at: coordinate)
+        } catch {
+            statusMessage = "Couldn't find that ZIP code — please check it and try again."
+            // Fall back to the prompt (first launch) or the existing delegation.
+            loadState = representatives.isEmpty ? .denied : .ready
+        }
     }
 
-    /// Dismisses the location prompt and continues with whatever sample data is
-    /// loaded (used when the user declines but wants to keep browsing).
-    func continueWithSampleData() {
-        if representatives.isEmpty {
-            representatives = SampleData.representatives
-        }
-        loadState = .ready
+    /// Records that location access was denied, keeping the user on the prompt
+    /// so they can retry, open Settings, or enter a ZIP code instead.
+    func locationAccessDenied() {
+        statusMessage = "Location access is off — try again or enter your ZIP code to find your representatives."
+        loadState = .denied
     }
 
     // MARK: - Delegation
@@ -231,30 +261,40 @@ final class RepresentativesStore {
         let candidatesByID = await fecCandidates
         let reports = await houseReports
 
-        // Look up each member's top funders concurrently, keyed off the FEC
-        // crosswalk. Skipped entirely (empty crosswalk) when no key is set.
-        let fundersByIndex = await withTaskGroup(of: (Int, [Funder]).self) { group in
+        // Look up each member's top PAC and individual funders concurrently,
+        // keyed off the FEC crosswalk. Skipped entirely (empty crosswalk) when no
+        // key is set. Both pulls share a candidate → committee resolution, so
+        // they overlap per member.
+        let fundersByIndex = await withTaskGroup(
+            of: (index: Int, pac: [Funder], individual: [Funder]).self
+        ) { group in
             for (index, rep) in billEnriched.enumerated() {
                 guard let id = rep.bioguideID,
                       let candidateIDs = candidatesByID[id], !candidateIDs.isEmpty else {
                     continue
                 }
                 group.addTask {
-                    (index, await financeService.topFunders(
+                    async let pac = financeService.topFunders(
                         candidateIDs: candidateIDs, office: rep.office
-                    ))
+                    )
+                    async let individual = financeService.topIndividualFunders(
+                        candidateIDs: candidateIDs, office: rep.office
+                    )
+                    return (index, await pac, await individual)
                 }
             }
-            var collected: [Int: [Funder]] = [:]
-            for await (index, funders) in group {
-                collected[index] = funders
+            var collected: [Int: (pac: [Funder], individual: [Funder])] = [:]
+            for await result in group {
+                collected[result.index] = (result.pac, result.individual)
             }
             return collected
         }
 
         return billEnriched.enumerated().map { index, rep in
-            let funders = fundersByIndex[index] ?? []
-            var rep = funders.isEmpty ? rep : rep.withFunders(funders)
+            let funders = fundersByIndex[index] ?? (pac: [], individual: [])
+            var rep = funders.pac.isEmpty && funders.individual.isEmpty
+                ? rep
+                : rep.withFunders(pac: funders.pac, individual: funders.individual)
             rep = rep.withTradingActivity(
                 disclosureService.tradingActivity(for: rep, houseReports: reports)
             )
