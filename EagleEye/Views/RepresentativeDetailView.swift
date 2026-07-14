@@ -171,11 +171,82 @@ struct RepresentativeDetailView: View {
 
     // MARK: - Money tab
 
-    /// Placeholder for the planned trading-performance / conflict-of-interest
-    /// meter, which needs a historical-price data source not yet wired up.
+    /// The published year-end report the "Beats the Market" figures come from,
+    /// linked from the states where the member isn't ranked.
+    private let tradingReportURL = URL(string: "https://unusualwhales.com/congress-trading-report-2025")
+
+    /// The distinct things the "Beats the Market" section can show, in priority
+    /// order: a ranked return, a "doesn't trade" note, or one of the not-ranked
+    /// explanations.
+    private enum MarketState {
+        /// Listed in the year-end snapshot — show the return card.
+        case ranked(MarketPerformance)
+        /// Publicly known not to trade individual stocks (blind trust / funds).
+        case abstains(note: String)
+        /// Trades, but disclosed nothing in the past year (House members only).
+        case noRecentTrades
+        /// Has recent disclosed trades but isn't in the year-end snapshot.
+        case tradesUnranked
+        /// Trading can't be classified here (e.g. senators) — point at the report.
+        case unranked
+    }
+
+    /// Resolves which state to show from the snapshot, the curated abstainer
+    /// list, and the member's disclosed-trade count.
+    private var marketState: MarketState {
+        if let performance = representative.marketPerformance {
+            return .ranked(performance)
+        }
+        if let note = MarketPerformanceService().abstention(for: representative) {
+            return .abstains(note: note)
+        }
+        // The House disclosure index gives a real recent-trade count; senators
+        // aren't covered by it, so they fall through to the generic report link.
+        if let activity = representative.tradingActivity, activity.isCovered {
+            return activity.recentReportCount > 0 ? .tradesUnranked : .noRecentTrades
+        }
+        return .unranked
+    }
+
+    /// The "Beats the Market" indicator. Shows the member's estimated annual
+    /// return vs. the S&P 500 when the year-end report lists them; otherwise a
+    /// state that reflects what we do know about their trading.
+    @ViewBuilder
     private var marketMeterSection: some View {
         ProfileSection(title: "Beats the Market", systemImage: "gauge.medium") {
-            EmptyNote("A trading-performance and conflict-of-interest score is coming once historical price data is wired up.")
+            switch marketState {
+            case .ranked(let performance):
+                MarketMeter(performance: performance)
+
+            case .abstains(let note):
+                VStack(alignment: .leading, spacing: 6) {
+                    Label {
+                        Text("Doesn't trade individual stocks")
+                            .font(.subheadline.weight(.semibold))
+                    } icon: {
+                        Image(systemName: "checkmark.seal.fill")
+                            .foregroundStyle(.green)
+                    }
+                    Text(note)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+            case .noRecentTrades:
+                EmptyNote("No individual stock trades disclosed in the past year.")
+
+            case .tradesUnranked:
+                VStack(alignment: .leading, spacing: 10) {
+                    EmptyNote("Has disclosed stock trades, but isn't among the top performers named in the latest year-end report.")
+                    ContactRow(systemImage: "arrow.up.right.square", text: "View the trading report", url: tradingReportURL)
+                }
+
+            case .unranked:
+                VStack(alignment: .leading, spacing: 10) {
+                    EmptyNote("Isn't among the members named in the latest year-end trading report, which highlights the most notable market-beating traders.")
+                    ContactRow(systemImage: "arrow.up.right.square", text: "View the trading report", url: tradingReportURL)
+                }
+            }
         }
     }
 
@@ -474,6 +545,63 @@ private struct VoteRow: View {
 
 /// A single contact detail: an icon, a value, and — when the value is
 /// actionable (a website, a phone number) — a tap target that opens it.
+/// The "Beats the Market" readout: the member's estimated annual portfolio
+/// return, colored and badged by whether it cleared the S&P 500, with the
+/// benchmark spelled out and a link to the source report.
+private struct MarketMeter: View {
+    let performance: MarketPerformance
+
+    private var tint: Color { performance.beatsMarket ? .green : .red }
+
+    /// e.g. "78.8%".
+    private var returnText: String {
+        String(format: "%.1f%%", performance.returnPercent)
+    }
+
+    /// e.g. "16.6%".
+    private var benchmarkText: String {
+        String(format: "%.1f%%", performance.benchmarkPercent)
+    }
+
+    /// Signed points above or below the benchmark, e.g. "+62.2".
+    private var marginText: String {
+        String(format: "%+.1f", performance.marginPercent)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(returnText)
+                    .font(.title.bold())
+                    .foregroundStyle(tint)
+                    .contentTransition(.numericText())
+
+                Label(
+                    performance.beatsMarket ? "Beat the market" : "Trailed the market",
+                    systemImage: performance.beatsMarket ? "arrow.up.right" : "arrow.down.right"
+                )
+                .font(.caption.bold())
+                .foregroundStyle(tint)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(tint.opacity(0.15), in: .capsule)
+            }
+
+            Text("\(marginText) pts vs. the S&P 500, which returned \(benchmarkText) in \(String(performance.year)).")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            if let url = performance.sourceURL {
+                ContactRow(systemImage: "arrow.up.right.square", text: "Read the trading report", url: url)
+            }
+
+            Text("Estimated from the member's disclosed stock trades, whose amounts are reported as ranges — so this figure is approximate.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+    }
+}
+
 private struct ContactRow: View {
     let systemImage: String
     let text: String

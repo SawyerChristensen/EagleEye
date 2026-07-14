@@ -213,6 +213,28 @@ struct TradingActivity: Codable, Hashable {
     }
 }
 
+/// An estimate of how a member's disclosed stock portfolio performed over a
+/// calendar year, measured against the S&P 500 for that same year — the basis
+/// for the profile's "Beats the Market" indicator. Sourced once a year from
+/// Unusual Whales' published year-end congressional-trading report, so only
+/// members whose figures that report lists carry one.
+struct MarketPerformance: Codable, Hashable {
+    /// The calendar year the figures cover, e.g. 2025.
+    let year: Int
+    /// The member's estimated total portfolio return for the year, in percent.
+    let returnPercent: Double
+    /// The S&P 500's total return for the same year, in percent.
+    let benchmarkPercent: Double
+    /// Where the figure was published, for a "read the report" link.
+    let sourceURL: URL?
+
+    /// Whether the member's portfolio outperformed the S&P 500 that year.
+    var beatsMarket: Bool { returnPercent > benchmarkPercent }
+
+    /// Percentage points above (positive) or below (negative) the benchmark.
+    var marginPercent: Double { returnPercent - benchmarkPercent }
+}
+
 /// A source of campaign funding, used on the member's profile.
 struct Funder: Codable, Hashable {
     let name: String
@@ -260,6 +282,9 @@ struct Representative: Identifiable, Codable, Hashable {
     let contact: ContactInfo?
     /// Stock-trade disclosure summary; `nil` until loaded.
     let tradingActivity: TradingActivity?
+    /// Estimated annual trading performance vs. the market; `nil` unless the
+    /// member appears in the bundled year-end trading report.
+    let marketPerformance: MarketPerformance?
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: officeLatitude, longitude: officeLongitude)
@@ -288,7 +313,8 @@ struct Representative: Identifiable, Codable, Hashable {
             funders: funders,
             individualFunders: individualFunders,
             contact: contact,
-            tradingActivity: tradingActivity
+            tradingActivity: tradingActivity,
+            marketPerformance: marketPerformance
         )
     }
 
@@ -314,7 +340,8 @@ struct Representative: Identifiable, Codable, Hashable {
             funders: funders,
             individualFunders: individualFunders,
             contact: contact,
-            tradingActivity: tradingActivity
+            tradingActivity: tradingActivity,
+            marketPerformance: marketPerformance
         )
     }
 
@@ -340,7 +367,8 @@ struct Representative: Identifiable, Codable, Hashable {
             funders: funders,
             individualFunders: individualFunders,
             contact: contact,
-            tradingActivity: tradingActivity
+            tradingActivity: tradingActivity,
+            marketPerformance: marketPerformance
         )
     }
 
@@ -367,7 +395,8 @@ struct Representative: Identifiable, Codable, Hashable {
             funders: pac,
             individualFunders: individual,
             contact: contact,
-            tradingActivity: tradingActivity
+            tradingActivity: tradingActivity,
+            marketPerformance: marketPerformance
         )
     }
 
@@ -393,7 +422,8 @@ struct Representative: Identifiable, Codable, Hashable {
             funders: funders,
             individualFunders: individualFunders,
             contact: contact,
-            tradingActivity: tradingActivity
+            tradingActivity: tradingActivity,
+            marketPerformance: marketPerformance
         )
     }
 
@@ -419,7 +449,35 @@ struct Representative: Identifiable, Codable, Hashable {
             funders: funders,
             individualFunders: individualFunders,
             contact: contact,
-            tradingActivity: tradingActivity
+            tradingActivity: tradingActivity,
+            marketPerformance: marketPerformance
+        )
+    }
+
+    /// Returns a copy with the annual trading-performance estimate filled in,
+    /// used after the member is matched against the bundled year-end report.
+    func withMarketPerformance(_ marketPerformance: MarketPerformance) -> Representative {
+        Representative(
+            id: id,
+            name: name,
+            party: party,
+            office: office,
+            state: state,
+            district: district,
+            bioguideID: bioguideID,
+            officeLatitude: officeLatitude,
+            officeLongitude: officeLongitude,
+            portraitURL: portraitURL,
+            tenureStart: tenureStart,
+            committees: committees,
+            keyVotes: keyVotes,
+            sponsoredBills: sponsoredBills,
+            cosponsoredBills: cosponsoredBills,
+            funders: funders,
+            individualFunders: individualFunders,
+            contact: contact,
+            tradingActivity: tradingActivity,
+            marketPerformance: marketPerformance
         )
     }
 
@@ -466,7 +524,8 @@ struct Representative: Identifiable, Codable, Hashable {
         funders: [Funder] = [],
         individualFunders: [Funder] = [],
         contact: ContactInfo? = nil,
-        tradingActivity: TradingActivity? = nil
+        tradingActivity: TradingActivity? = nil,
+        marketPerformance: MarketPerformance? = nil
     ) {
         self.id = id
         self.name = name
@@ -487,5 +546,6 @@ struct Representative: Identifiable, Codable, Hashable {
         self.individualFunders = individualFunders
         self.contact = contact
         self.tradingActivity = tradingActivity
+        self.marketPerformance = marketPerformance
     }
 }

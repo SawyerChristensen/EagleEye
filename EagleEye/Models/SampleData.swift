@@ -42,6 +42,15 @@ enum SampleData {
                 topics: ["Commerce"]
             ),
             Bill(
+                title: "H.R. 448 — Border Infrastructure Modernization Act",
+                summary: "Would have authorized new funding for port-of-entry technology and expanded staffing for asylum processing. Passed the House but was voted down in the Senate.",
+                chamber: .house,
+                status: .passedHouse,
+                latestActionDate: daysAgo(4),
+                topics: ["Immigration"],
+                failedChamber: .senate
+            ),
+            Bill(
                 title: "S. 1156 — Coastal Resilience Funding Act",
                 summary: "Authorizes $4B over five years for flood-control infrastructure and wetland restoration in coastal states facing rising sea levels.",
                 chamber: .senate,

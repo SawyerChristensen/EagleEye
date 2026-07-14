@@ -1183,13 +1183,29 @@ extension Bill {
             ? .senate : .house
         let actionText = dto.latestAction?.text
 
+        // A defeated floor vote overrides the usual status inference: the bill is
+        // a dead end, so record the chamber that voted it down and the furthest
+        // stage it had cleared before failing.
+        let failedChamber = Self.failedChamber(fromAction: actionText, origin: chamber)
+        let status: BillStatus
+        if let failedChamber {
+            status = failedChamber == chamber
+                // Defeated on its own floor — it had only cleared committee.
+                ? .inCommittee
+                // Defeated in the other chamber — it must have passed its origin.
+                : (chamber == .house ? .passedHouse : .passedSenate)
+        } else {
+            status = Self.status(fromAction: actionText, chamber: chamber)
+        }
+
         self.init(
             title: Self.displayTitle(type: dto.type, number: dto.number, title: rawTitle),
             summary: actionText ?? "No recent action recorded.",
             chamber: chamber,
-            status: Self.status(fromAction: actionText, chamber: chamber),
+            status: status,
             latestActionDate: Self.parseDate(dto.latestAction?.actionDate) ?? Date(),
             topics: [],
+            failedChamber: failedChamber,
             congress: dto.congress,
             billType: dto.type,
             billNumber: dto.number
@@ -1213,6 +1229,7 @@ extension Bill {
             status: status,
             latestActionDate: latestActionDate,
             topics: topics,
+            failedChamber: failedChamber,
             congress: congress,
             billType: billType,
             billNumber: billNumber
@@ -1283,6 +1300,32 @@ extension Bill {
             return .inCommittee
         }
         return .introduced
+    }
+
+    /// Detects a failed floor vote from the latest-action text, returning the
+    /// chamber that defeated the measure — or `nil` when the latest action isn't
+    /// a defeat. Only the measure's own passage counts: a rejected passage,
+    /// adoption, or cloture vote (a filibuster that blocks a bill in the Senate),
+    /// not a procedural motion or a defeated amendment along the way. The chamber
+    /// is read from the text, falling back to the bill's origin chamber when the
+    /// action doesn't name one.
+    private static func failedChamber(fromAction text: String?, origin: Chamber) -> Chamber? {
+        let text = text?.lowercased() ?? ""
+
+        let defeated =
+            (text.contains("failed") && (text.contains("passage")
+                || text.contains("to pass") || text.contains("adoption")
+                || text.contains("enactment")))
+            || (text.contains("rejected") && (text.contains("passage")
+                || text.contains("cloture") || text.contains("motion to proceed")
+                || text.contains("concur")))
+            || (text.contains("cloture") && (text.contains("not invoked")
+                || text.contains("rejected") || text.contains("not agreed to")))
+        guard defeated else { return nil }
+
+        if text.contains("senate") { return .senate }
+        if text.contains("house") { return .house }
+        return origin
     }
 
     /// Parses a Congress.gov "yyyy-MM-dd" action date.

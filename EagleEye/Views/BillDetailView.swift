@@ -66,7 +66,7 @@ struct BillDetailView: View {
                         }
                     }
 
-                    BillProgressStrip(status: bill.status, chamber: bill.chamber)
+                    BillProgressStrip(status: bill.status, chamber: bill.chamber, failedChamber: bill.failedChamber)
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
 
@@ -253,6 +253,10 @@ private extension HorizontalAlignment {
 private struct BillProgressStrip: View {
     let status: BillStatus
     let chamber: Chamber
+    /// The chamber that defeated the bill, when it failed. A failed bill is a
+    /// dead end: the strip shows the stage it cleared, then the red "Failed"
+    /// badge, with no future stage since it advances no further.
+    var failedChamber: Chamber? = nil
 
     var body: some View {
         // A hidden pill-height reference fills the available (already-padded)
@@ -274,13 +278,21 @@ private struct BillProgressStrip: View {
                 // however wide the flanking labels are. `.fixedSize()` keeps the
                 // pills at full width, letting them overflow and fade at the edges.
                 HStack(spacing: 8) {
-                    if let previous = status.previousStage(chamber: chamber) {
-                        StepPill(label: previous.displayLabel(chamber: chamber), kind: .past)
-                    }
-                    StatusBadge(status: status, chamber: chamber)
-                        .alignmentGuide(.progressCurrent) { $0[HorizontalAlignment.center] }
-                    if let next = status.nextStage(chamber: chamber) {
-                        StepPill(label: next.displayLabel(chamber: chamber), kind: .future)
+                    if failedChamber != nil {
+                        // Dead end: the stage it cleared, then the failure. No
+                        // next stage — the bill advances no further.
+                        StepPill(label: status.displayLabel(chamber: chamber), kind: .past)
+                        StatusBadge(status: status, chamber: chamber, failedChamber: failedChamber)
+                            .alignmentGuide(.progressCurrent) { $0[HorizontalAlignment.center] }
+                    } else {
+                        if let previous = status.previousStage(chamber: chamber) {
+                            StepPill(label: previous.displayLabel(chamber: chamber), kind: .past)
+                        }
+                        StatusBadge(status: status, chamber: chamber)
+                            .alignmentGuide(.progressCurrent) { $0[HorizontalAlignment.center] }
+                        if let next = status.nextStage(chamber: chamber) {
+                            StepPill(label: next.displayLabel(chamber: chamber), kind: .future)
+                        }
                     }
                 }
                 .fixedSize()

@@ -44,6 +44,7 @@ final class RepresentativesStore {
     private let contactService: MemberContactService
     private let financeService: OpenFECService
     private let disclosureService: FinancialDisclosureService
+    private let marketService: MarketPerformanceService
 
     /// The last coordinate we successfully resolved a delegation for. Persisted
     /// so future launches can refresh without prompting for location again.
@@ -55,7 +56,8 @@ final class RepresentativesStore {
         committeeService: CommitteeService = CommitteeService(),
         contactService: MemberContactService = MemberContactService(),
         financeService: OpenFECService = OpenFECService(),
-        disclosureService: FinancialDisclosureService = FinancialDisclosureService()
+        disclosureService: FinancialDisclosureService = FinancialDisclosureService(),
+        marketService: MarketPerformanceService = MarketPerformanceService()
     ) {
         self.service = service
         self.geocoder = geocoder
@@ -63,6 +65,7 @@ final class RepresentativesStore {
         self.contactService = contactService
         self.financeService = financeService
         self.disclosureService = disclosureService
+        self.marketService = marketService
 
         #if DEBUG
         // Pass "-ResetDelegationCache" as a launch argument in the Run scheme to
@@ -117,7 +120,8 @@ final class RepresentativesStore {
                     committeeService: committeeService,
                     contactService: contactService,
                     financeService: financeService,
-                    disclosureService: disclosureService
+                    disclosureService: disclosureService,
+                    marketService: marketService
                 )
                 cachedCoordinate = coordinate
                 Self.saveCache(coordinate: coordinate, representatives: representatives)
@@ -219,7 +223,8 @@ final class RepresentativesStore {
         committeeService: CommitteeService,
         contactService: MemberContactService,
         financeService: OpenFECService,
-        disclosureService: FinancialDisclosureService
+        disclosureService: FinancialDisclosureService,
+        marketService: MarketPerformanceService
     ) async -> [Representative] {
         // Kick off the shared single-dataset fetches (committees, social media,
         // House trade disclosures, and — only when an FEC key is configured —
@@ -298,6 +303,9 @@ final class RepresentativesStore {
             rep = rep.withTradingActivity(
                 disclosureService.tradingActivity(for: rep, houseReports: reports)
             )
+            if let performance = marketService.performance(for: rep) {
+                rep = rep.withMarketPerformance(performance)
+            }
             let withCommittees: Representative = {
                 guard let id = rep.bioguideID,
                       let committees = committeesByID[id], !committees.isEmpty else {

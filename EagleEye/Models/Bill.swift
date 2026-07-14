@@ -156,6 +156,15 @@ struct Bill: Identifiable, Codable, Hashable {
     let latestActionDate: Date
     /// Broad policy areas the bill touches, used for quick scanning.
     let topics: [String]
+    /// The chamber where a floor vote defeated the bill, or `nil` if it hasn't
+    /// been voted down. A failed bill is a dead end — it advances no further —
+    /// but it's surfaced in the feed so users can see when their representatives
+    /// voted a measure down. `status` still records the furthest stage the bill
+    /// cleared before failing (e.g. "Passed House" for one the Senate rejected).
+    let failedChamber: Chamber?
+
+    /// Whether the bill was defeated by a floor vote.
+    var failed: Bool { failedChamber != nil }
 
     // MARK: - Identifiers
     // Carried so the detail screen can fetch the bill's roll-call votes. `nil`
@@ -177,6 +186,7 @@ struct Bill: Identifiable, Codable, Hashable {
         status: BillStatus,
         latestActionDate: Date,
         topics: [String] = [],
+        failedChamber: Chamber? = nil,
         congress: Int? = nil,
         billType: String? = nil,
         billNumber: String? = nil
@@ -189,6 +199,7 @@ struct Bill: Identifiable, Codable, Hashable {
         self.status = status
         self.latestActionDate = latestActionDate
         self.topics = topics
+        self.failedChamber = failedChamber
         self.congress = congress
         self.billType = billType
         self.billNumber = billNumber
@@ -363,39 +374,52 @@ extension Bill {
 // MARK: - Ranking
 
 extension Bill {
-    /// How far the bill has advanced through the legislative process, from 0
-    /// (just introduced) to 1 (enacted). Bills further along carry more weight.
+    /// How consequential the bill's current standing is, from 0 (just
+    /// introduced) to 1 (enacted). This encodes the feed's priority order:
+    /// enacted laws lead, then bills defeated *after* clearing a chamber (so a
+    /// "no" vote your representative cast on something that nearly became law is
+    /// visible), then bills that passed a chamber, then bills defeated on their
+    /// own floor, then those still in committee, then the just-introduced. A
+    /// defeated bill advances no further, so its weight reflects how far it got
+    /// before failing rather than a live stage.
     var progressWeight: Double {
+        if failed {
+            switch status {
+            // Defeated after clearing a chamber — the most consequential loss.
+            case .passedHouse, .passedSenate, .toPresident, .enacted: return 0.75
+            // Defeated on its origin floor, having only cleared committee.
+            case .introduced, .inCommittee: return 0.3
+            }
+        }
         switch status {
-        case .introduced: 0.1
-        case .inCommittee: 0.25
-        case .passedHouse, .passedSenate: 0.6
-        case .toPresident: 0.85
-        case .enacted: 1.0
+        case .introduced: return 0.05
+        case .inCommittee: return 0.15
+        case .passedHouse, .passedSenate: return 0.6
+        case .toPresident: return 0.9
+        case .enacted: return 1.0
         }
     }
 
-    /// How much legislative progress can boost a bill over fresher activity. Held
-    /// below recency's full 0–1 range so an advanced bill leads its same-age peers
-    /// and can outrank slightly newer, less-advanced ones — but can't leap over
-    /// genuinely recent activity. At 0.5, a passed bill carries roughly a one-week
-    /// recency head start over a bill still in committee, no more.
-    private static let progressInfluence = 0.5
+    /// How much legislative progress can boost a bill over fresher activity.
+    /// Weighted above recency's 0–1 range so how far a bill has advanced is the
+    /// dominant signal: consequential, high-stage bills (enacted laws, floor
+    /// defeats) lead the feed even against newer committee churn, and low-stakes
+    /// committee action sinks unless it's very recent. At 0.9 an enacted bill
+    /// stays ahead of brand-new committee activity for roughly three weeks.
+    private static let progressInfluence = 0.9
 
-    /// A ranking score that surfaces consequential, *active* legislation first:
-    /// it rises with how far the bill has advanced and decays as its most recent
-    /// action ages. A bill near the President's desk outranks one stuck in
-    /// committee of similar vintage, but a long-dormant bill sinks beneath fresher
-    /// activity — a passed bill from last week no longer leaps over a committee
-    /// action from a few days ago.
+    /// A ranking score that surfaces consequential legislation first: it rises
+    /// with how far the bill has advanced and decays as its most recent action
+    /// ages. Progress leads — an enacted law or a floor defeat outranks committee
+    /// churn even when the latter is newer — while recency breaks ties within a
+    /// stage and lets a long-dormant bill eventually give way to fresh activity.
     func importance(asOf now: Date = Date()) -> Double {
         let days = max(0, now.timeIntervalSince(latestActionDate) / 86_400)
         // Exponential decay with a roughly three-week time constant.
         let recency = exp(-days / 21)
-        // Recency leads; progress is a bounded boost on top. Weighting progress
-        // below recency's range keeps a healthy mix of stages in the feed and
-        // lets genuinely recent activity rise, rather than letting older advanced
-        // bills crowd out this week's committee and introduced action.
+        // Progress leads and recency modulates: weighting progress above recency's
+        // 0–1 range keeps high-stage bills on top while still letting genuinely
+        // recent action surface and stale bills sink over time.
         return Self.progressInfluence * progressWeight + recency
     }
 }

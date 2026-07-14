@@ -76,7 +76,7 @@ private struct BillRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                StatusBadge(status: bill.status, chamber: bill.chamber)
+                StatusBadge(status: bill.status, chamber: bill.chamber, failedChamber: bill.failedChamber)
                     .layoutPriority(1)
 
                 if bill.topics.isEmpty {
@@ -157,10 +157,14 @@ private struct TopicPillStrip: View {
 }
 
 /// A colored pill describing where the bill is in the process, with the
-/// chamber folded into a single label (e.g. "Introduced to the House").
+/// chamber folded into a single label (e.g. "Introduced to the House"). A
+/// defeated bill reads in red as "Failed in {chamber}" instead.
 struct StatusBadge: View {
     let status: BillStatus
     let chamber: Chamber
+    /// The chamber that voted the bill down, when it was defeated. Overrides the
+    /// stage label and tint to a red "Failed in {chamber}" pill.
+    var failedChamber: Chamber? = nil
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -170,28 +174,41 @@ struct StatusBadge: View {
         colorScheme == .dark ? Color(red: 0.40, green: 0.66, blue: 1.0) : .blue
     }
 
+    private var label: String {
+        if let failedChamber {
+            return "Failed in \(failedChamber.rawValue)"
+        }
+        return status.displayLabel(chamber: chamber)
+    }
+
+    private var symbolName: String {
+        failedChamber == nil ? chamber.symbolName : "xmark.circle"
+    }
+
     private var foregroundColor: Color {
+        if failedChamber != nil { return .red }
         switch status.tint {
-        case "blue": blue
-        case "green": .green
-        default: .secondary
+        case "blue": return blue
+        case "green": return .green
+        default: return .secondary
         }
     }
 
     private var backgroundColor: Color {
+        if failedChamber != nil { return .red.opacity(colorScheme == .dark ? 0.18 : 0.1) }
         switch status.tint {
-        case "blue": blue.opacity(colorScheme == .dark ? 0.18 : 0.1)
-        case "green": .green.opacity(0.1)
+        case "blue": return blue.opacity(colorScheme == .dark ? 0.18 : 0.1)
+        case "green": return .green.opacity(0.1)
         // Distinct gray for the fallback; systemGray5 reads too bright in dark
         // mode, so drop to the darker systemGray6 there.
-        default: colorScheme == .dark ? Color(.systemGray6) : Color(.systemGray5)
+        default: return colorScheme == .dark ? Color(.systemGray6) : Color(.systemGray5)
         }
     }
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: chamber.symbolName)
-            Text(status.displayLabel(chamber: chamber))
+            Image(systemName: symbolName)
+            Text(label)
         }
         .font(.caption.weight(.semibold))
         .lineLimit(1)
