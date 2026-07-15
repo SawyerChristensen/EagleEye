@@ -21,9 +21,10 @@ struct RepresentativesView: View {
         representatives.filter { $0.office == .representative }
     }
 
-    /// Senators first (top rows), then representatives, each grouped two per row.
-    private var rows: [[Representative]] {
-        chunked(senators, by: 2) + chunked(houseMembers, by: 2)
+    /// The delegation in display order: the most senior senator first, then
+    /// the junior senator, then the House representative.
+    private var orderedRepresentatives: [Representative] {
+        senators.sorted { $0.tenureStart < $1.tenureStart } + houseMembers
     }
 
     var body: some View {
@@ -33,20 +34,19 @@ struct RepresentativesView: View {
                     ProgressView("Finding your representatives…")
                 } else {
                     ScrollView {
-                        VStack(spacing: 24) {
-                            ForEach(rows.indices, id: \.self) { index in
-                                HStack(spacing: 0) {
-                                    ForEach(rows[index]) { rep in
-                                        NavigationLink(value: rep) {
-                                            RepresentativeCell(representative: rep)
-                                        }
-                                        .buttonStyle(.plain)
-                                        .frame(maxWidth: .infinity)
-                                    }
+                        VStack(spacing: 0) {
+                            ForEach(orderedRepresentatives.indices, id: \.self) { index in
+                                NavigationLink(value: orderedRepresentatives[index]) {
+                                    RepresentativeRow(representative: orderedRepresentatives[index])
+                                }
+                                .buttonStyle(.plain)
+
+                                if index < orderedRepresentatives.count - 1 {
+                                    Divider()
                                 }
                             }
                         }
-                        .padding(.horizontal, 8)
+                        .padding(.horizontal, 20)
                         .padding(.vertical, 12)
                     }
                 }
@@ -61,42 +61,111 @@ struct RepresentativesView: View {
         }
     }
 
-    /// Splits a list into sub-arrays of at most `size` elements.
-    private func chunked(_ reps: [Representative], by size: Int) -> [[Representative]] {
-        stride(from: 0, to: reps.count, by: size).map {
-            Array(reps[$0..<min($0 + size, reps.count)])
-        }
-    }
+    // MARK: - Previous two-per-row grid layout
+    //
+    // Kept here in case we want to bring the grid back. Superseded by the
+    // seniority-ordered list above.
+    //
+    // private var rows: [[Representative]] {
+    //     chunked(senators, by: 2) + chunked(houseMembers, by: 2)
+    // }
+    //
+    // private var gridBody: some View {
+    //     ScrollView {
+    //         VStack(spacing: 24) {
+    //             ForEach(rows.indices, id: \.self) { index in
+    //                 HStack(spacing: 0) {
+    //                     ForEach(rows[index]) { rep in
+    //                         NavigationLink(value: rep) {
+    //                             RepresentativeGridCell(representative: rep)
+    //                         }
+    //                         .buttonStyle(.plain)
+    //                         .frame(maxWidth: .infinity)
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //         .padding(.horizontal, 8)
+    //         .padding(.vertical, 12)
+    //     }
+    // }
+    //
+    // /// Splits a list into sub-arrays of at most `size` elements.
+    // private func chunked(_ reps: [Representative], by size: Int) -> [[Representative]] {
+    //     stride(from: 0, to: reps.count, by: size).map {
+    //         Array(reps[$0..<min($0 + size, reps.count)])
+    //     }
+    // }
 }
 
-/// A single tappable representative in the grid: a large portrait above the
-/// member's name and role.
-private struct RepresentativeCell: View {
+/// A single tappable representative in the list: a portrait with a party-color
+/// glow beside the member's name and role.
+private struct RepresentativeRow: View {
     let representative: Representative
 
     var body: some View {
-        VStack(spacing: 10) {
-            RepresentativePortrait(representative: representative, size: 120)
+        HStack(spacing: 16) {
+            RepresentativePortrait(representative: representative, size: 60, style: .shadow)
 
-            VStack(spacing: 3) {
-                Text("\(representative.name) \(Image(systemName: "chevron.right"))")
+            VStack(alignment: .leading, spacing: 3) {
+                Text(representative.name)
                     .font(.headline)
                     .foregroundStyle(.primary)
-                    .multilineTextAlignment(.center)
                 Text(representative.roleDescription)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
             }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.tertiary)
         }
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
     }
 }
 
+// MARK: - Previous two-per-row grid cell
+//
+// Kept alongside the grid layout above in case we bring it back.
+//
+// private struct RepresentativeGridCell: View {
+//     let representative: Representative
+//
+//     var body: some View {
+//         VStack(spacing: 10) {
+//             RepresentativePortrait(representative: representative, size: 120)
+//
+//             VStack(spacing: 3) {
+//                 Text("\(representative.name) \(Image(systemName: "chevron.right"))")
+//                     .font(.headline)
+//                     .foregroundStyle(.primary)
+//                     .multilineTextAlignment(.center)
+//                 Text(representative.roleDescription)
+//                     .font(.subheadline)
+//                     .foregroundStyle(.secondary)
+//                     .multilineTextAlignment(.center)
+//             }
+//         }
+//     }
+// }
+
+/// How a portrait's party affiliation is indicated.
+enum PortraitAccentStyle {
+    /// A colored ring stroked around the portrait.
+    case outline
+    /// A soft colored glow behind the portrait, with no ring.
+    case shadow
+}
+
 /// The member's official portrait, falling back to colored initials when no
-/// image is available. Shared by the grid and the profile screen.
+/// image is available. Shared by the list and the profile screen.
 struct RepresentativePortrait: View {
     let representative: Representative
     let size: CGFloat
+    var style: PortraitAccentStyle = .outline
 
     private var partyColor: Color {
         switch representative.party {
@@ -131,7 +200,16 @@ struct RepresentativePortrait: View {
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
-        .overlay(Circle().strokeBorder(partyColor.opacity(0.6), lineWidth: 3))
+        .overlay {
+            if style == .outline {
+                Circle().strokeBorder(partyColor.opacity(0.6), lineWidth: 3)
+            }
+        }
+        .shadow(
+            color: style == .shadow ? partyColor.opacity(0.7) : .clear,
+            radius: style == .shadow ? size * 0.12 : 0,
+            y: style == .shadow ? 2 : 0
+        )
     }
 
     private var placeholder: some View {

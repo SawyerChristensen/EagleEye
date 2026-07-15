@@ -55,18 +55,23 @@
 - [x] Expand the recent bills section to load more if the user reaches the bottom of the feed
 - [x] Locating seems to take a LONG time. How about we progress to the home "recent bills" section while this is happening and location detection continues in the background? Only kicking back to the loading screen if theres some sort of error?
   - [x] This works, but kind of. right now the user taps "locate" and view instantly progresses to the home recent bills section at the same time apple system prompt shows up asking the user if they want to share their exact or approximate location. the view should only progress after the user makes a choice in this selection. before then, while the apple location prompt is up on the screen, the user should still see the onboarding location view in the background.
+- [x] Transition the "Your Representatives" section into having their party color as a shadow rather than an outline. Have a simpler list. Maybe comment out how we build the current view so that we can use it later. Now it should be a list where the most senior senator is one top, followed by the other senator, with the representative on bottom. This should replace the 2-a-row feature we have right now and there should be lines in between each
+- [ ] Some of the icons are a little dark. Is there anything similar to the photos app "magic wand" feature that automatically makes photos look good? That should be applied to each photo we get to automatically fix any lighting issues in their official portrait
 
 ---
 
 ## 0.4 — Interactive Map
 
-- [x] Build the interactive map view (evaluate performance and utility)
+- [ ] Build the interactive map view (evaluate performance and utility)
+  - [ ] The icons of representatives are currently misplaced. Jeff Merkley appears off the coast of Africa instead of in Washington DC. Actually, skip placing senators for now. but something wasnt working for him to be placed there
+    - [ ] Pictures dont show up over the representatives name. Their icons should show up like they do in the list view
   - [ ] Find borders of all congressional districts give them small borders. Find borders for states and give them thicker borders
   - [ ] Fill the congressional districts with party color, with each representative in the middle of the district or the district capitol (if there is one)
     - [ ] If a distrct is tapped on, the name of the district should pop up on a sheet that only fills the bottom half of the screen. the sheet should be draggable if the user wants to drag it up so that it fills all of the screen (it can still be dragged down and dismissed)
     - [ ] The sheet should have the district name with a copy of the district outline on the right and the representatives profile underneath it. This of course can be expanded as described above
   - [ ] Zoom out to state level to see governor + senators. display the icons as triangles with the govenor on top. The state outline should be filled with the state flag instead of a single party color.
     - [ ] The transition between the different color coded district outlines and the state flag/state level representatives should be smooth
+    - [ ] The "go back to user location" button in the top right should not adjust zoom level too much. it shouldnt zoom in to their neighborhood. just their district, as that is what is relevant in this context
 
 ---
 
@@ -85,7 +90,8 @@
 
 ## 0.6 — iOS integration
 
-- [x] Add home screen widgets that show what would be shown as the top bill in the recent bills feed
+- [ ] Add home screen widgets that show what would be shown as the top bill in the recent bills feed
+  - [ ] Currently the home screen widgets are broken. While I can add one to my home screen, it says "No bill available" and doesnt display anything. It should display the bill title as shown in in app, the description. The background of the widget should match the color of the status of the bill. In committee, grey. Passed house or senate, blue, and enacted, green. Instead of a progress pill, it should just have the status text on the top of the widget as a header above the title. This color should of course be deactived if the user has a clear or tinted homescreen. The background should be the only "colored" thing. The text should be either white or some sort of greys
 - [x] Add system notifications for new bills being passed
   - [x] Recently enacted laws should be a push notification
   - [x] Add the ability to bookmark a bill to recieve all notifications about it
@@ -100,7 +106,8 @@
 
 ---
 
-## Version 1.1
+## Version 1.1 DO 
+NOT DO UNLESS EVERYTHING BEFORE 1.0 IS DONE
 
 - [ ] "Beats the market" quantitative metric — parse each PTR PDF into transactions (ticker, buy/sell, amount range, date) + pull historical prices to compute returns vs. a benchmark *(backend job: PDF parsing + a historical price data source; moved here from 0.3)*
 - [ ] Add information about if a senator beats the market. Pre calculate this and add this as a hard value in an update if there is no online source readily available
