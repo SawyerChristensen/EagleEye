@@ -71,11 +71,11 @@
 
 ## 0.5 — Platform & Reach
 
-- [ ] Implement local caching for offline viewing *(partially done: bills and delegation are cached on disk)*
+- [x] Implement local caching for offline viewing *(bills, bill detail/roll-calls, and the full delegation — including committees, contact info, funders, trading activity, and voting history — are cached on disk)*
   - [x] Representatives icons
   - [x] Bills
-  - [ ] Representative information
-  - [ ] Voting histories
+  - [x] Representative information *(cached as part of the delegation in `RepresentativesStore`'s `DelegationCache`; survives offline relaunches since `refreshUsingCachedLocation` runs silently and leaves the cache untouched on failure)*
+  - [x] Voting histories *(`CongressService.enrichedProfile`/`SenateService.votingHistory` populate `Representative.keyVotes`, which is part of the same cached delegation)*
 - [ ] Localization framework setup for multi-language support (Spanish, French, etc.)
 
 ---
