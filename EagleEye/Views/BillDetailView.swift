@@ -199,14 +199,32 @@ struct BillDetailView: View {
             return
         }
 
-        voteLoad = .loading
-        switch await service.billVote(congress: congress, type: type, number: number) {
-        case .recorded(let tallies):
-            voteLoad = .recorded(tallies)
-        case .unrecorded(let method):
-            voteLoad = .unrecorded(method)
-        case .unavailable:
+        // Show the last-known outcome instantly (e.g. offline, or a bill
+        // reopened from a profile) while a fresh lookup runs in the background.
+        if let cached = BillDetailCache.cachedVoteOutcome(congress: congress, type: type, number: number) {
+            apply(cached)
+        } else {
+            voteLoad = .loading
+        }
+
+        let outcome = await service.billVote(congress: congress, type: type, number: number)
+        guard case .unavailable = outcome else {
+            apply(outcome)
+            BillDetailCache.cacheVoteOutcome(outcome, congress: congress, type: type, number: number)
+            return
+        }
+        // The lookup failed (e.g. no connection) — keep showing the cached
+        // outcome if we had one rather than clobbering it with "unavailable".
+        if case .loading = voteLoad {
             voteLoad = .unrecorded(nil)
+        }
+    }
+
+    private func apply(_ outcome: BillVoteOutcome) {
+        switch outcome {
+        case .recorded(let tallies): voteLoad = .recorded(tallies)
+        case .unrecorded(let method): voteLoad = .unrecorded(method)
+        case .unavailable: voteLoad = .unrecorded(nil)
         }
     }
 }
@@ -636,7 +654,16 @@ struct MemberBillDetailView: View {
         .navigationTitle("Bill")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            bill = await service.billDetail(for: reference)
+            // Show the last-fetched detail instantly while a fresh one loads,
+            // so the bill is still viewable offline once it's been opened before.
+            if let cached = BillDetailCache.cachedBill(for: reference) {
+                bill = cached
+                isLoading = false
+            }
+            if let fetched = await service.billDetail(for: reference) {
+                bill = fetched
+                BillDetailCache.cacheBill(fetched, for: reference)
+            }
             isLoading = false
         }
     }

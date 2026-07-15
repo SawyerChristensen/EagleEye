@@ -73,7 +73,7 @@
 
 - [ ] Implement local caching for offline viewing *(partially done: bills and delegation are cached on disk)*
   - [x] Representatives icons
-  - [ ] Bills
+  - [x] Bills
   - [ ] Representative information
   - [ ] Voting histories
 - [ ] Localization framework setup for multi-language support (Spanish, French, etc.)

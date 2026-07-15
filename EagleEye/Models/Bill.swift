@@ -210,7 +210,7 @@ struct Bill: Identifiable, Codable, Hashable {
 
 /// One member's recorded position on a roll-call vote, used to disclose the full
 /// tally on a bill's detail screen.
-struct MemberVote: Identifiable, Hashable {
+struct MemberVote: Identifiable, Hashable, Codable {
     /// Identifies the member and spots the user's own representatives. For House
     /// votes this is the Bioguide ID; the Senate roster is keyed by LIS ID rather
     /// than Bioguide, so Senate rows use `matchKey` instead.
@@ -241,7 +241,7 @@ extension MemberVote {
 /// The roll-call breakdown for one chamber's vote on a bill: how every member
 /// voted, plus the question asked and when. House rosters come from Congress.gov;
 /// Senate rosters from Senate.gov's roll-call XML.
-struct BillVoteTally: Hashable {
+struct BillVoteTally: Hashable, Codable {
     /// Which chamber's vote this tally is, so the detail screen can label it.
     let chamber: Chamber
     /// The floor question, e.g. "On Passage" or "On Motion to Concur…".
@@ -265,13 +265,13 @@ struct BillVoteTally: Hashable {
 /// How a bill cleared a chamber when no roll call was taken, parsed from the
 /// action text so the detail screen can name the method rather than show a
 /// vague "no vote recorded".
-enum PassageMethod {
+enum PassageMethod: Codable {
     case voiceVote
     case unanimousConsent
 }
 
 /// The result of looking up a bill's roll-call votes.
-enum BillVoteOutcome {
+enum BillVoteOutcome: Codable {
     /// One or more recorded roll calls with full member rosters — a bill that
     /// cleared both chambers carries a House and a Senate tally, ordered
     /// most-recent first.
