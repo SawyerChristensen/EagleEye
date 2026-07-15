@@ -7,6 +7,7 @@
 
 import Foundation
 import CoreLocation
+import SwiftUI
 
 /// A political party affiliation.
 enum Party: String, Codable {
@@ -16,6 +17,16 @@ enum Party: String, Codable {
 
     /// Single-letter abbreviation, e.g. "D", "R", "I".
     var abbreviation: String { String(rawValue.prefix(1)) }
+
+    /// The color used to represent this party throughout the app, e.g. the
+    /// district map fill and the profile's party-colored accents.
+    var color: Color {
+        switch self {
+        case .democrat: .blue
+        case .republican: .red
+        case .independent: .purple
+        }
+    }
 }
 
 /// The office a member of Congress holds.

@@ -16,6 +16,53 @@ struct MapBoundary: Identifiable {
     let state: String
     let district: Int?
     let rings: [[CLLocationCoordinate2D]]
+
+    /// A point near the geometric middle of this boundary, used to pin a
+    /// representative on the map. Uses the largest ring by area — rather than
+    /// averaging every ring — so a district with small offshore islands or
+    /// exclaves still centers on its mainland body.
+    var centroid: CLLocationCoordinate2D {
+        guard let largestRing = rings.max(by: { abs(Self.signedArea($0)) < abs(Self.signedArea($1)) }) else {
+            return CLLocationCoordinate2D(latitude: 0, longitude: 0)
+        }
+        return Self.centroid(of: largestRing)
+    }
+
+    /// Signed area of a ring via the shoelace formula (positive/negative
+    /// indicates winding order; magnitude is what matters for ring size).
+    private static func signedArea(_ ring: [CLLocationCoordinate2D]) -> Double {
+        guard ring.count > 2 else { return 0 }
+        var sum = 0.0
+        for i in 0..<ring.count {
+            let p0 = ring[i]
+            let p1 = ring[(i + 1) % ring.count]
+            sum += p0.longitude * p1.latitude - p1.longitude * p0.latitude
+        }
+        return sum / 2
+    }
+
+    /// Area-weighted centroid of a polygon ring, which lands inside the shape
+    /// far more reliably than a plain average of its vertices.
+    private static func centroid(of ring: [CLLocationCoordinate2D]) -> CLLocationCoordinate2D {
+        let area = signedArea(ring)
+        guard ring.count > 2, abs(area) > .ulpOfOne else {
+            let lat = ring.map(\.latitude).reduce(0, +) / Double(max(ring.count, 1))
+            let lon = ring.map(\.longitude).reduce(0, +) / Double(max(ring.count, 1))
+            return CLLocationCoordinate2D(latitude: lat, longitude: lon)
+        }
+        var cx = 0.0
+        var cy = 0.0
+        for i in 0..<ring.count {
+            let p0 = ring[i]
+            let p1 = ring[(i + 1) % ring.count]
+            let cross = p0.longitude * p1.latitude - p1.longitude * p0.latitude
+            cx += (p0.longitude + p1.longitude) * cross
+            cy += (p0.latitude + p1.latitude) * cross
+        }
+        cx /= (6 * area)
+        cy /= (6 * area)
+        return CLLocationCoordinate2D(latitude: cy, longitude: cx)
+    }
 }
 
 private struct BoundaryFeatureDTO: Decodable {

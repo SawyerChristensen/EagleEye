@@ -15,11 +15,20 @@ struct DistrictMapView: View {
     @State private var stateBoundaries: [MapBoundary] = []
     @State private var districtBoundaries: [MapBoundary] = []
 
-    /// Members to show as pins. Senators are excluded for now — their office
-    /// coordinate placement isn't reliable yet — and any member whose office
-    /// address failed to geocode is skipped rather than showing at (0, 0).
+    /// Members to show as pins. Senators are excluded for now — they represent
+    /// a whole state rather than a single district, so they have no "middle of
+    /// the district" point to pin at.
     private var mappable: [Representative] {
-        representatives.filter { $0.office == .representative && $0.hasResolvedCoordinate }
+        representatives.filter { $0.office == .representative }
+    }
+
+    /// Each House member's party, keyed by state and district, used to tint
+    /// their district's fill on the map.
+    private var partyByDistrict: [String: Party] {
+        Dictionary(
+            mappable.map { (districtKey(state: $0.state, district: $0.district), $0.party) },
+            uniquingKeysWith: { first, _ in first }
+        )
     }
 
     var body: some View {
@@ -27,7 +36,8 @@ struct DistrictMapView: View {
             Map(position: $position) {
                 ForEach(districtBoundaries) { boundary in
                     ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
-                        MapPolyline(coordinates: closed(ring))
+                        MapPolygon(coordinates: closed(ring))
+                            .foregroundStyle(fillColor(for: boundary).opacity(0.28))
                             .stroke(.secondary.opacity(0.5), lineWidth: 0.75)
                     }
                 }
@@ -40,8 +50,10 @@ struct DistrictMapView: View {
                 }
 
                 ForEach(mappable) { rep in
-                    Annotation(rep.name, coordinate: rep.coordinate) {
-                        RepresentativePortrait(representative: rep, size: 40, style: .outline)
+                    if let coordinate = districtCenter(for: rep) {
+                        Annotation(rep.name, coordinate: coordinate) {
+                            RepresentativePortrait(representative: rep, size: 40, style: .outline)
+                        }
                     }
                 }
 
@@ -67,6 +79,27 @@ struct DistrictMapView: View {
     private func closed(_ ring: [CLLocationCoordinate2D]) -> [CLLocationCoordinate2D] {
         guard let first = ring.first else { return ring }
         return ring + [first]
+    }
+
+    /// A lookup key combining state and district number; at-large districts
+    /// use `0`, matching the bundled Census boundary data.
+    private func districtKey(state: String, district: Int?) -> String {
+        "\(state)-\(district ?? 0)"
+    }
+
+    /// The fill color for a district's polygon: its representative's party
+    /// color, or clear if no member currently matches it (e.g. a non-voting
+    /// delegate's district).
+    private func fillColor(for boundary: MapBoundary) -> Color {
+        partyByDistrict[districtKey(state: boundary.state, district: boundary.district)]?.color ?? .clear
+    }
+
+    /// The point at which to pin a representative: the geometric middle of
+    /// their district, so members are spread across the map rather than
+    /// clustered at their Washington office.
+    private func districtCenter(for rep: Representative) -> CLLocationCoordinate2D? {
+        let key = districtKey(state: rep.state, district: rep.district)
+        return districtBoundaries.first { districtKey(state: $0.state, district: $0.district) == key }?.centroid
     }
 }
 
