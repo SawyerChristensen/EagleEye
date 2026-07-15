@@ -45,10 +45,10 @@
 - [x] When finding initial location, it displays the sample data in the representatives view. it should be blank until the real representatives load in
 - [x] Inlcude recent bills that failed in the feed, so you can see if your senator or representative voted against something you wouldve supported.
   - [x] Prioritize recent bills in this priority: 1) recently enacted, 2) recently failed but passed one chamber 3) passed one chamber 4) recently failed but passed committee 5) passed committe 6) introduced and update the progress pills accordingly
-- [ ] "Beats the market" / insider-trading / corruption meter *(needs a trading-disclosure data source)*
+- [x] "Beats the market" / insider-trading / corruption meter *(needs a trading-disclosure data source)* — trading-activity transparency shipped; quantitative scoring deferred to post-launch (see Version 1.1)
   - [x] Trading-activity indicator — House Periodic Transaction Report (PTR) count for the past year, latest-filing date, and a link to the filing, from the free House Clerk disclosure index (on-device ZIP + TSV parsing, no key). Senators link out to the Senate eFD portal.
   - [x] Senate coverage — parse efdsearch.senate.gov (agreement + CSRF + DataTables JSON) for senators' PTRs
-  - [ ] "Beats the market" quantitative metric — parse each PTR PDF into transactions (ticker, buy/sell, amount range, date) + pull historical prices to compute returns vs. a benchmark *(realistically a backend job, not on-device) if not doable in a short amount of time, move this feature as a post launch feature and this to do list item)*
+  - [-] "Beats the market" quantitative metric — moved to Version 1.1 (post-launch); realistically a backend job (PDF parsing + historical price data source), not feasible on-device
 - [x] Add 3 tabs to the representative view. 1st tab is about (Committees, Bills, Contact info), 2nd tab is voting history (show the full title for each bill as it appears on the home feed, with an arrow to view the bills full details, should go to the same screen we end up on if tapped on from the home screen), 3rd tab should be the money tab the ("Beats the market"/ insider-trading / corruption meter), stock trades, top PAC funders,  top individual funders
   - [x] Add top individual funders, specify they are employees if the category is a company. if "Attorney" expand to plural form ie "Attornies"
   - [x] About section shoud have an "i" icon, Votes the voting history icon, and money a dollar bill sf symbol in the tab view next to the text
@@ -102,6 +102,7 @@
 
 ## Version 1.1
 
+- [ ] "Beats the market" quantitative metric — parse each PTR PDF into transactions (ticker, buy/sell, amount range, date) + pull historical prices to compute returns vs. a benchmark *(backend job: PDF parsing + a historical price data source; moved here from 0.3)*
 - [ ] Add information about if a senator beats the market. Pre calculate this and add this as a hard value in an update if there is no online source readily available
 - [ ] Add information on state legislatures somewhere behind a Poltica+ IAP
 - [ ] Detect if an election is going on, default to the map view and report information about the election through the Poltica+ IAP
