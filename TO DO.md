@@ -54,6 +54,7 @@
   - [x] About section shoud have an "i" icon, Votes the voting history icon, and money a dollar bill sf symbol in the tab view next to the text
 - [x] Expand the recent bills section to load more if the user reaches the bottom of the feed
 - [x] Locating seems to take a LONG time. How about we progress to the home "recent bills" section while this is happening and location detection continues in the background? Only kicking back to the loading screen if theres some sort of error?
+  - [x] This works, but kind of. right now the user taps "locate" and view instantly progresses to the home recent bills section at the same time apple system prompt shows up asking the user if they want to share their exact or approximate location. the view should only progress after the user makes a choice in this selection. before then, while the apple location prompt is up on the screen, the user should still see the onboarding location view in the background.
 
 ---
 

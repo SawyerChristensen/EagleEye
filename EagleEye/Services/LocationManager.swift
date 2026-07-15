@@ -46,9 +46,11 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         authorizationStatus = manager.authorizationStatus
     }
 
-    /// Prompts for permission if needed, then resolves a single coordinate.
-    /// Throws `LocationError.denied` when the user hasn't granted access.
-    func requestLocation() async throws -> CLLocationCoordinate2D {
+    /// Prompts for permission if needed and waits for the user's choice.
+    /// Throws `LocationError.denied` when access isn't (or wasn't) granted.
+    /// Callers should await this before treating location as available, since
+    /// the system permission dialog (when shown) must be answered first.
+    func requestAuthorizationIfNeeded() async throws {
         switch authorizationStatus {
         case .notDetermined:
             let status = await requestAuthorization()
@@ -60,8 +62,12 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         default:
             throw LocationError.denied
         }
+    }
 
-        return try await withCheckedThrowingContinuation { continuation in
+    /// Resolves a single coordinate. Assumes authorization has already been
+    /// granted, e.g. via `requestAuthorizationIfNeeded()`.
+    func requestLocation() async throws -> CLLocationCoordinate2D {
+        try await withCheckedThrowingContinuation { continuation in
             locationContinuation = continuation
             manager.requestLocation()
         }

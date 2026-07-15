@@ -84,13 +84,16 @@ struct ContentView: View {
         }))
     }
 
-    /// Asks for the user's location, then loads their delegation. Moves to the
+    /// Asks for the user's location, then loads their delegation. Stays on the
+    /// location prompt (so the system permission dialog, when shown, has the
+    /// prompt visible behind it) until the user answers it, then moves to the
     /// main tabs right away so the home feed can load while CoreLocation waits
-    /// for a fix, only falling back to the location prompt if access is denied
-    /// or no fix arrives.
+    /// for a fix. Falls back to the location prompt if access is denied or no
+    /// fix arrives.
     private func resolveLocation() async {
-        store.beginLocating()
         do {
+            try await location.requestAuthorizationIfNeeded()
+            store.beginLocating()
             let coordinate = try await location.requestLocation()
             await store.loadDelegation(at: coordinate)
         } catch {
