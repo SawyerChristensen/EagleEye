@@ -94,7 +94,7 @@
 
 ## Version 1.0
 - [ ] Organize project
-- [ ] Modify ReadME
+- [x] Modify ReadME
 #### Release!
 
 
