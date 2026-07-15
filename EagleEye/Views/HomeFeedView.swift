@@ -11,7 +11,9 @@ struct HomeFeedView: View {
     let bills: [Bill]
     var isLoading: Bool = false /// True while bills are being fetched and there's nothing to show yet.
     var statusMessage: String? = nil /// A note shown above the feed when the latest refresh couldn't replace the data.
+    var isLoadingMore: Bool = false /// True while an additional page is being fetched below the current bills.
     var onRefresh: (() async -> Void)? = nil /// Pull-to-refresh handler; omitted in previews and when not applicable.
+    var onLoadMore: (() async -> Void)? = nil /// Called when the user scrolls near the bottom, to fetch the next page.
 
     var body: some View {
         NavigationStack {
@@ -29,6 +31,22 @@ struct HomeFeedView: View {
                             // to align with the row's content and it only covers
                             // the right portion of the screen.
                             .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+                            .onAppear {
+                                // Fire a bit before the true last row so the next
+                                // page is ready before the user hits the bottom.
+                                guard let index = bills.firstIndex(where: { $0.id == bill.id }) else { return }
+                                if index >= bills.count - 3 {
+                                    Task { await onLoadMore?() }
+                                }
+                            }
+                        }
+                        if isLoadingMore {
+                            HStack {
+                                Spacer()
+                                ProgressView()
+                                Spacer()
+                            }
+                            .listRowSeparator(.hidden)
                         }
                     }
                     .listStyle(.plain)

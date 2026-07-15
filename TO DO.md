@@ -52,7 +52,7 @@
 - [x] Add 3 tabs to the representative view. 1st tab is about (Committees, Bills, Contact info), 2nd tab is voting history (show the full title for each bill as it appears on the home feed, with an arrow to view the bills full details, should go to the same screen we end up on if tapped on from the home screen), 3rd tab should be the money tab the ("Beats the market"/ insider-trading / corruption meter), stock trades, top PAC funders,  top individual funders
   - [x] Add top individual funders, specify they are employees if the category is a company. if "Attorney" expand to plural form ie "Attornies"
   - [x] About section shoud have an "i" icon, Votes the voting history icon, and money a dollar bill sf symbol in the tab view next to the text
-- [ ] Expand the recent bills section to load more if the user reaches the bottom of the feed
+- [x] Expand the recent bills section to load more if the user reaches the bottom of the feed
 - [ ] Locating seems to take a LONG time. How about we progress to the home "recent bills" section while this is happening and location detection continues in the background? Only kicking back to the loading screen if theres some sort of error?
 
 ---

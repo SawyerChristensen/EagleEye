@@ -60,7 +60,9 @@ struct ContentView: View {
                     bills: billsStore.bills,
                     isLoading: billsStore.loadState == .loading,
                     statusMessage: billsStore.statusMessage,
-                    onRefresh: billsStore.load
+                    isLoadingMore: billsStore.isLoadingMore,
+                    onRefresh: billsStore.load,
+                    onLoadMore: billsStore.loadMore
                 )
             }
 

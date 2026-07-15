@@ -29,8 +29,13 @@ final class BillsStore {
     private(set) var loadState: LoadState = .loading
     /// A user-facing note when live data could not be loaded (e.g. no API key).
     private(set) var statusMessage: String?
+    /// Whether a `loadMore()` request is currently in flight.
+    private(set) var isLoadingMore = false
+    /// Whether scrolling to the bottom should attempt to fetch another page.
+    private(set) var canLoadMore = true
 
     private let service: CongressService
+    private let pageSize = 20
 
     init(service: CongressService = CongressService()) {
         self.service = service
@@ -52,9 +57,10 @@ final class BillsStore {
         // Start each attempt clean; the branches below re-raise a message if the
         // refresh doesn't actually replace the feed.
         statusMessage = nil
+        canLoadMore = true
 
         do {
-            let fetched = try await service.recentBills()
+            let fetched = try await service.recentBills(limit: pageSize)
             if fetched.isEmpty {
                 // A successful-but-empty response must not silently overwrite a
                 // good cache. If we have nothing else, fall back to samples;
@@ -87,6 +93,34 @@ final class BillsStore {
                 statusMessage = "Couldn't refresh — showing saved bills. (\(error.localizedDescription))"
             }
             loadState = .ready
+        }
+    }
+
+    /// Fetches the next page of bills ranked just below what's already shown and
+    /// appends them, for infinite-scroll as the user nears the bottom of the feed.
+    func loadMore() async {
+        guard !isLoadingMore, canLoadMore, loadState == .ready else { return }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+
+        do {
+            let fetched = try await service.recentBills(limit: pageSize, offset: bills.count)
+            if fetched.isEmpty {
+                canLoadMore = false
+                return
+            }
+            let existingIDs = Set(bills.map(\.id))
+            let newBills = fetched.filter { !existingIDs.contains($0.id) }
+            bills.append(contentsOf: newBills)
+            Self.saveCache(bills)
+            if fetched.count < pageSize {
+                canLoadMore = false
+            }
+        } catch {
+            // No more pages worth trying this session (e.g. no API key, or the
+            // ranked pool is exhausted) — fail quietly since the feed already
+            // has bills on screen.
+            canLoadMore = false
         }
     }
 

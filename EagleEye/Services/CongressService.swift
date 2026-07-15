@@ -587,7 +587,9 @@ struct CongressService {
 
     /// Fetches the bills most recently acted on in the current Congress, newest
     /// first. These power the home feed of legislation moving through Congress.
-    func recentBills(limit: Int = 20) async throws -> [Bill] {
+    /// `offset` skips past bills already ranked ahead of this slice, so callers
+    /// can page through the importance-ranked pool for "load more" behavior.
+    func recentBills(limit: Int = 20, offset: Int = 0) async throws -> [Bill] {
         print("🔍 CongressService: Starting fetch for recent bills...")
 
         guard !apiKey.isEmpty, apiKey != Self.apiKeyPlaceholder else {
@@ -603,7 +605,7 @@ struct CongressService {
         // flood and buries genuinely recent floor activity past the ceiling, so we
         // pull the full 250-record page Congress.gov allows, rank it by importance,
         // then enrich only the bills we'll show — keeping detail volume bounded.
-        let poolLimit = min(250, max(limit * 5, 250))
+        let poolLimit = min(250, max((limit + offset) * 5, 250))
 
         var components = URLComponents(
             string: "https://api.congress.gov/v3/bill/\(Self.currentCongress)"
@@ -649,6 +651,7 @@ struct CongressService {
         let ranked = payload.bills
             .compactMap { dto in Bill(dto: dto).map { (dto, $0) } }
             .sorted { $0.1.importance() > $1.1.importance() }
+            .dropFirst(offset)
             .prefix(limit)
             .map(\.0)
 
