@@ -86,7 +86,7 @@
 ## 0.6 — iOS integration
 
 - [ ] Add home screen widgets that show what would be shown as the top bill in the recent bills feed
-- [ ] Add system notifications for new bills being passed
+- [x] Add system notifications for new bills being passed
   - [x] Recently enacted laws should be a push notification
   - [x] Add the ability to bookmark a bill to recieve all notifications about it
 
