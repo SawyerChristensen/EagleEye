@@ -18,6 +18,7 @@ struct ContentView: View {
     @State private var store = RepresentativesStore()
     @State private var billsStore = BillsStore()
     @State private var bookmarksStore = BookmarksStore()
+    @State private var enactedLawsNotifier = EnactedLawsNotifier()
     @State private var location = LocationManager()
 
     var body: some View {
@@ -87,10 +88,12 @@ struct ContentView: View {
     }
 
     /// Refreshes the home feed, then checks whether any bookmarked bill's
-    /// status changed since the last refresh, notifying the user if so.
+    /// status changed or any bill newly became law since the last refresh,
+    /// notifying the user if so.
     private func refreshBills() async {
         await billsStore.load()
         bookmarksStore.checkForUpdates(in: billsStore.bills)
+        enactedLawsNotifier.checkForNewlyEnacted(in: billsStore.bills)
     }
 
     /// Asks for the user's location, then loads their delegation. Stays on the
