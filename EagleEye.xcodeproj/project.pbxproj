@@ -8,6 +8,13 @@
 
 /* Begin PBXBuildFile section */
 		BEF922482FEC3B3800C3EE25 /* TO DO.md in Resources */ = {isa = PBXBuildFile; fileRef = BEF922472FEC3B3800C3EE25 /* TO DO.md */; };
+		6F04F0FBBCB773A548BF22C6 /* EagleEyeWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1E0F26589124F137552525 /* EagleEyeWidgetBundle.swift */; };
+		D37396D1CB292BD239CEB8CE /* TopBillWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 086B23FDA18FBE1D53B95AD8 /* TopBillWidget.swift */; };
+		ADA87801532AE17FF7D6A692 /* Bill.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCE025ADD4CD955F782E96B4 /* Bill.swift */; };
+		E337A5590D5860F297E59422 /* CongressService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12D838790D522B322BAB1145 /* CongressService.swift */; };
+		2E97C301C54C39D40871233C /* SenateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32A5F89DAFF48F5A381EE153 /* SenateService.swift */; };
+		2A7FF58DEAB0A97CEE6BA6CF /* Representative.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7D0B29BC7BC65D443ECBD02 /* Representative.swift */; };
+		D5E91942C1937F891E049668 /* EagleEyeWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 96636A2B7D60CEDA95AEBC7E /* EagleEyeWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeaderFile, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -25,13 +32,42 @@
 			remoteGlobalIDString = BEF59A572FEB30D7009C2382;
 			remoteInfo = EagleEye;
 		};
+		3202932F44CA21B437FA6C52 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BEF59A502FEB30D7009C2382 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 38AB67BAF692767BB2FC4954;
+			remoteInfo = EagleEyeWidgetExtension;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		F7B38E76345F8565D20C7EF3 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				D5E91942C1937F891E049668 /* EagleEyeWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		BEF59A582FEB30D7009C2382 /* EagleEye.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EagleEye.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BEF59A652FEB30D9009C2382 /* EagleEyeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EagleEyeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BEF59A6F2FEB30D9009C2382 /* EagleEyeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EagleEyeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BEF922472FEC3B3800C3EE25 /* TO DO.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "TO DO.md"; sourceTree = "<group>"; };
+		96636A2B7D60CEDA95AEBC7E /* EagleEyeWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = EagleEyeWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		4A1E0F26589124F137552525 /* EagleEyeWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EagleEyeWidgetBundle.swift; sourceTree = "<group>"; };
+		086B23FDA18FBE1D53B95AD8 /* TopBillWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopBillWidget.swift; sourceTree = "<group>"; };
+		7B9A2E5BBC7EFE52F4AB0CD4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		FCE025ADD4CD955F782E96B4 /* Bill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EagleEye/Models/Bill.swift; sourceTree = SOURCE_ROOT; };
+		12D838790D522B322BAB1145 /* CongressService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EagleEye/Services/CongressService.swift; sourceTree = SOURCE_ROOT; };
+		32A5F89DAFF48F5A381EE153 /* SenateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EagleEye/Services/SenateService.swift; sourceTree = SOURCE_ROOT; };
+		F7D0B29BC7BC65D443ECBD02 /* Representative.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EagleEye/Models/Representative.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -74,6 +110,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		85A12C2BA7718ADC81BD7E6B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -84,6 +127,7 @@
 				BEF59A5A2FEB30D7009C2382 /* EagleEye */,
 				BEF59A682FEB30D9009C2382 /* EagleEyeTests */,
 				BEF59A722FEB30D9009C2382 /* EagleEyeUITests */,
+				441AE070E5598AA61338C232 /* EagleEyeWidget */,
 				BEF59A592FEB30D7009C2382 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -94,8 +138,19 @@
 				BEF59A582FEB30D7009C2382 /* EagleEye.app */,
 				BEF59A652FEB30D9009C2382 /* EagleEyeTests.xctest */,
 				BEF59A6F2FEB30D9009C2382 /* EagleEyeUITests.xctest */,
+				96636A2B7D60CEDA95AEBC7E /* EagleEyeWidgetExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		441AE070E5598AA61338C232 /* EagleEyeWidget */ = {
+			isa = PBXGroup;
+			children = (
+				4A1E0F26589124F137552525 /* EagleEyeWidgetBundle.swift */,
+				086B23FDA18FBE1D53B95AD8 /* TopBillWidget.swift */,
+				7B9A2E5BBC7EFE52F4AB0CD4 /* Info.plist */,
+			);
+			path = EagleEyeWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -108,10 +163,12 @@
 				BEF59A542FEB30D7009C2382 /* Sources */,
 				BEF59A552FEB30D7009C2382 /* Frameworks */,
 				BEF59A562FEB30D7009C2382 /* Resources */,
+				F7B38E76345F8565D20C7EF3 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				643E94124144AE3A27CDCC1C /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				BEF59A5A2FEB30D7009C2382 /* EagleEye */,
@@ -169,6 +226,25 @@
 			productReference = BEF59A6F2FEB30D9009C2382 /* EagleEyeUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		38AB67BAF692767BB2FC4954 /* EagleEyeWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8D313644DCB81CA764BF21A0 /* Build configuration list for PBXNativeTarget "EagleEyeWidgetExtension" */;
+			buildPhases = (
+				A66A010AAEEB8851F01F65E3 /* Sources */,
+				85A12C2BA7718ADC81BD7E6B /* Frameworks */,
+				5BE84B438B21138A3C64BE6B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = EagleEyeWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = EagleEyeWidgetExtension;
+			productReference = 96636A2B7D60CEDA95AEBC7E /* EagleEyeWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -190,6 +266,9 @@
 						CreatedOnToolsVersion = 26.5;
 						TestTargetID = BEF59A572FEB30D7009C2382;
 					};
+					38AB67BAF692767BB2FC4954 = {
+						CreatedOnToolsVersion = 26.5;
+					};
 				};
 			};
 			buildConfigurationList = BEF59A532FEB30D7009C2382 /* Build configuration list for PBXProject "EagleEye" */;
@@ -210,6 +289,7 @@
 				BEF59A572FEB30D7009C2382 /* EagleEye */,
 				BEF59A642FEB30D9009C2382 /* EagleEyeTests */,
 				BEF59A6E2FEB30D9009C2382 /* EagleEyeUITests */,
+				38AB67BAF692767BB2FC4954 /* EagleEyeWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -231,6 +311,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		BEF59A6D2FEB30D9009C2382 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5BE84B438B21138A3C64BE6B /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -261,6 +348,19 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A66A010AAEEB8851F01F65E3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6F04F0FBBCB773A548BF22C6 /* EagleEyeWidgetBundle.swift in Sources */,
+				D37396D1CB292BD239CEB8CE /* TopBillWidget.swift in Sources */,
+				ADA87801532AE17FF7D6A692 /* Bill.swift in Sources */,
+				E337A5590D5860F297E59422 /* CongressService.swift in Sources */,
+				2E97C301C54C39D40871233C /* SenateService.swift in Sources */,
+				2A7FF58DEAB0A97CEE6BA6CF /* Representative.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -273,6 +373,11 @@
 			isa = PBXTargetDependency;
 			target = BEF59A572FEB30D7009C2382 /* EagleEye */;
 			targetProxy = BEF59A702FEB30D9009C2382 /* PBXContainerItemProxy */;
+		};
+		643E94124144AE3A27CDCC1C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 38AB67BAF692767BB2FC4954 /* EagleEyeWidgetExtension */;
+			targetProxy = 3202932F44CA21B437FA6C52 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -560,6 +665,56 @@
 			};
 			name = Release;
 		};
+		71B1B371D1CBEFD42D6294E4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 4X76DT8A23;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = EagleEyeWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Sawyer.EagleEye.EagleEyeWidgetExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		969BF5CC034F205DEBD3D559 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 4X76DT8A23;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = EagleEyeWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Sawyer.EagleEye.EagleEyeWidgetExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -595,6 +750,15 @@
 			buildConfigurations = (
 				BEF59A802FEB30D9009C2382 /* Debug */,
 				BEF59A812FEB30D9009C2382 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8D313644DCB81CA764BF21A0 /* Build configuration list for PBXNativeTarget "EagleEyeWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				71B1B371D1CBEFD42D6294E4 /* Debug */,
+				969BF5CC034F205DEBD3D559 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
