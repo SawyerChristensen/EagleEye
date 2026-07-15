@@ -182,6 +182,15 @@ final class RepresentativesStore {
         }
     }
 
+    /// Marks a location request as in flight, moving straight to `.loading` so
+    /// the main tabs (and the home feed, which doesn't depend on the
+    /// delegation) render immediately instead of blocking on the location
+    /// prompt while CoreLocation waits for a fix.
+    func beginLocating() {
+        loadState = .loading
+        statusMessage = nil
+    }
+
     /// Records that location access was denied, keeping the user on the prompt
     /// so they can retry, open Settings, or enter a ZIP code instead.
     func locationAccessDenied() {

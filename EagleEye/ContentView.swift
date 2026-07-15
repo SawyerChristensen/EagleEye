@@ -84,9 +84,12 @@ struct ContentView: View {
         }))
     }
 
-    /// Asks for the user's location, then loads their delegation. Falls back to
-    /// the denied state (with sample data) if access isn't granted.
+    /// Asks for the user's location, then loads their delegation. Moves to the
+    /// main tabs right away so the home feed can load while CoreLocation waits
+    /// for a fix, only falling back to the location prompt if access is denied
+    /// or no fix arrives.
     private func resolveLocation() async {
+        store.beginLocating()
         do {
             let coordinate = try await location.requestLocation()
             await store.loadDelegation(at: coordinate)
