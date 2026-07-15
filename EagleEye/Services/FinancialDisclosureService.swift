@@ -13,11 +13,16 @@
 //  the periodic transaction reports (individual stock trades). No key, no terms
 //  gate — plain HTTPS.
 //
-//  Scope: this covers the House only. The Senate publishes its filings through
-//  a separate, agreement-gated portal (efdsearch.senate.gov), so senators carry
-//  a link to that portal rather than a computed count. The quantitative
-//  "beats the market" analysis is a follow-on: it needs each PTR's PDF parsed
-//  into transactions plus historical prices, neither of which this index has.
+//  The Senate publishes its filings through a separate, agreement-gated portal
+//  (efdsearch.senate.gov) instead of a plain index file. Its search endpoint is
+//  a Django DataTables view that requires a one-time "prohibition agreement"
+//  POST (carrying a CSRF token pulled from the session cookie) before it will
+//  answer JSON queries for periodic transaction reports. No login or API key
+//  is needed, just that handshake.
+//
+//  The quantitative "beats the market" analysis is a follow-on: it needs each
+//  PTR's PDF parsed into transactions plus historical prices, neither of which
+//  either index has.
 //
 //  Note on use: the Clerk's data carries a usage restriction prohibiting
 //  commercial use other than dissemination to the public by news/communications
@@ -33,8 +38,8 @@ import Compression
 struct FinancialDisclosureService {
     var session: URLSession = .shared
 
-    /// The Senate's disclosure portal, used as the senators' link-out since the
-    /// House index doesn't cover them.
+    /// The Senate's disclosure portal, used as the senators' link-out when the
+    /// eFD search can't be reached (e.g. it changes its handshake).
     static let senateSearchURL = URL(string: "https://efdsearch.senate.gov/search/")!
 
     /// How far back a Periodic Transaction Report still counts toward the
@@ -51,22 +56,54 @@ struct FinancialDisclosureService {
         return thisYear + lastYear
     }
 
+    /// Loads senators' periodic transaction reports from the Senate eFD search
+    /// portal for the trailing window. Returns an empty list on any failure
+    /// (including the agreement handshake failing), which leaves every
+    /// senator's trading section pointed at the portal instead of a count.
+    func senateTransactionReports(now: Date = Date()) async -> [SenateFilingRecord] {
+        guard let csrfToken = await agreeToSenateTerms() else { return [] }
+        let cutoff = now.addingTimeInterval(-Self.trailingWindow)
+
+        var records: [SenateFilingRecord] = []
+        var start = 0
+        let pageSize = 100
+        for _ in 0..<Self.maxSenatePages {
+            guard let page = await senateSearchPage(
+                start: start, length: pageSize, csrfToken: csrfToken,
+                submittedStart: cutoff, submittedEnd: now
+            ) else { break }
+
+            records.append(contentsOf: page.rows.compactMap(Self.parseSenateRow))
+            start += pageSize
+            let reachedCutoff = page.rows.count < pageSize
+            if start >= page.recordsTotal || reachedCutoff { break }
+        }
+        return records.filter { ($0.filingDate ?? .distantPast) >= cutoff }
+    }
+
     /// Builds the trading-activity summary for a member from the shared House
-    /// index. House members get a real report count and a link to their most
-    /// recent filing; senators get a link to the Senate portal only.
+    /// or Senate index, whichever matches their chamber.
     func tradingActivity(
         for representative: Representative,
         houseReports: [FilingRecord],
+        senateReports: [SenateFilingRecord],
         now: Date = Date()
     ) -> TradingActivity {
+        let cutoff = now.addingTimeInterval(-Self.trailingWindow)
+
         guard representative.office == .representative else {
-            // The House index doesn't cover senators — point at the Senate's
-            // own portal instead of implying we have their reports.
-            return TradingActivity(disclosureURL: Self.senateSearchURL, isCovered: false)
+            let mine = senateReports.filter { $0.matches(representative) }
+            let recent = mine.filter { ($0.filingDate ?? .distantPast) >= cutoff }
+            let latest = mine.max { ($0.filingDate ?? .distantPast) < ($1.filingDate ?? .distantPast) }
+            return TradingActivity(
+                recentReportCount: recent.count,
+                latestReportDate: latest?.filingDate,
+                disclosureURL: latest?.viewURL ?? Self.senateSearchURL,
+                isCovered: true
+            )
         }
 
         let mine = houseReports.filter { $0.matches(representative) }
-        let cutoff = now.addingTimeInterval(-Self.trailingWindow)
         let recent = mine.filter { ($0.filingDate ?? .distantPast) >= cutoff }
         let latest = mine.max { ($0.filingDate ?? .distantPast) < ($1.filingDate ?? .distantPast) }
 
@@ -114,6 +151,119 @@ struct FinancialDisclosureService {
             )
         }
     }
+
+    // MARK: - Senate eFD search
+
+    /// A page's worth of results is never more than this many pages away — a
+    /// safety cap so a server-side surprise (e.g. pagination that never signals
+    /// completion) can't turn into an unbounded fetch loop.
+    private static let maxSenatePages = 20
+    private static let senateUserAgent = "EagleEye/1.0"
+    private static let senateHomeURL = URL(string: "https://efdsearch.senate.gov/search/home/")!
+    private static let senateSearchDataURL = URL(string: "https://efdsearch.senate.gov/search/report/data/")!
+
+    /// Accepts the eFD portal's one-time "prohibition agreement" (required
+    /// before its search endpoint will respond) and returns the CSRF token to
+    /// carry on the search requests. Returns nil on any failure.
+    private func agreeToSenateTerms() async -> String? {
+        var homeRequest = URLRequest(url: Self.senateHomeURL)
+        homeRequest.setValue(Self.senateUserAgent, forHTTPHeaderField: "User-Agent")
+        guard let (_, homeResponse) = try? await session.data(for: homeRequest),
+              let homeHTTP = homeResponse as? HTTPURLResponse, 200..<300 ~= homeHTTP.statusCode,
+              let csrfToken = Self.cookieValue(named: "csrftoken", for: Self.senateHomeURL) else {
+            return nil
+        }
+
+        var agreeRequest = URLRequest(url: Self.senateHomeURL)
+        agreeRequest.httpMethod = "POST"
+        agreeRequest.setValue(Self.senateUserAgent, forHTTPHeaderField: "User-Agent")
+        agreeRequest.setValue(Self.senateHomeURL.absoluteString, forHTTPHeaderField: "Referer")
+        agreeRequest.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        agreeRequest.httpBody = Self.formBody([
+            ("prohibition_agreement", "1"),
+            ("csrfmiddlewaretoken", csrfToken),
+        ])
+        guard let (_, agreeResponse) = try? await session.data(for: agreeRequest),
+              let agreeHTTP = agreeResponse as? HTTPURLResponse, 200..<300 ~= agreeHTTP.statusCode else {
+            return nil
+        }
+        // The agreement can rotate the CSRF cookie, so re-read it for the
+        // search requests rather than assuming it's unchanged.
+        return Self.cookieValue(named: "csrftoken", for: Self.senateHomeURL) ?? csrfToken
+    }
+
+    /// Fetches one page of periodic-transaction-report search results (report
+    /// type 11) within the given submitted-date window. Returns nil on any
+    /// failure.
+    private func senateSearchPage(
+        start: Int, length: Int, csrfToken: String, submittedStart: Date, submittedEnd: Date
+    ) async -> (rows: [[String]], recordsTotal: Int)? {
+        var request = URLRequest(url: Self.senateSearchDataURL)
+        request.httpMethod = "POST"
+        request.setValue(Self.senateUserAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("https://efdsearch.senate.gov/search/", forHTTPHeaderField: "Referer")
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.setValue("XMLHttpRequest", forHTTPHeaderField: "X-Requested-With")
+        request.httpBody = Self.formBody([
+            ("draw", "1"),
+            ("start", String(start)),
+            ("length", String(length)),
+            ("report_types", "[11]"),
+            ("filer_types", "[]"),
+            ("submitted_start_date", senateQueryDateFormatter.string(from: submittedStart)),
+            ("submitted_end_date", senateQueryDateFormatter.string(from: submittedEnd)),
+            ("candidate_state", ""),
+            ("senator_state", ""),
+            ("office_id", ""),
+            ("first_name", ""),
+            ("last_name", ""),
+            ("csrfmiddlewaretoken", csrfToken),
+        ])
+        guard let (data, response) = try? await session.data(for: request),
+              let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode,
+              let decoded = try? JSONDecoder().decode(SenateSearchResponse.self, from: data) else {
+            return nil
+        }
+        return (decoded.data, decoded.recordsTotal)
+    }
+
+    /// Parses one search result row — [first, last, office, link HTML, date] —
+    /// into a filing record. Returns nil for a malformed row.
+    private static func parseSenateRow(_ row: [String]) -> SenateFilingRecord? {
+        guard row.count >= 5 else { return nil }
+        let last = row[1].trimmingCharacters(in: .whitespaces)
+        guard !last.isEmpty else { return nil }
+        let filingDate = filingDateFormatter.date(from: row[4].trimmingCharacters(in: .whitespaces))
+        let viewURL = extractHref(from: row[3]).flatMap { URL(string: "https://efdsearch.senate.gov\($0)") }
+        return SenateFilingRecord(last: last, filingDate: filingDate, viewURL: viewURL)
+    }
+
+    /// Pulls the `href` out of the result row's anchor tag, e.g.
+    /// `<a href="/search/view/ptr/…/">Periodic Transaction Report for …</a>`.
+    private static func extractHref(from html: String) -> String? {
+        guard let hrefRange = html.range(of: "href=\""),
+              let closingQuote = html[hrefRange.upperBound...].range(of: "\"") else { return nil }
+        return String(html[hrefRange.upperBound..<closingQuote.lowerBound])
+    }
+
+    /// Reads a cookie's value from the session's cookie storage, where the
+    /// eFD portal's CSRF token and agreement flag land after each request.
+    private static func cookieValue(named name: String, for url: URL) -> String? {
+        HTTPCookieStorage.shared.cookies(for: url)?.first { $0.name == name }?.value
+    }
+
+    /// Percent-encodes a form value strictly enough to survive Django's
+    /// `application/x-www-form-urlencoded` parsing — spaces, colons, and
+    /// brackets all need escaping here.
+    private static func formEncode(_ value: String) -> String {
+        value.addingPercentEncoding(withAllowedCharacters: formValueAllowedCharacters) ?? value
+    }
+
+    private static func formBody(_ params: [(String, String)]) -> Data {
+        params.map { "\($0.0)=\(formEncode($0.1))" }
+            .joined(separator: "&")
+            .data(using: .utf8) ?? Data()
+    }
 }
 
 /// One periodic-transaction-report row from the House disclosure index.
@@ -139,6 +289,49 @@ struct FilingRecord {
         URL(string: "https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/\(year)/\(docID).pdf")
     }
 }
+
+/// One periodic-transaction-report row from the Senate eFD search results.
+struct SenateFilingRecord {
+    let last: String
+    let filingDate: Date?
+    /// A link to the report's page on the eFD portal (either a structured PTR
+    /// or a scanned paper filing — both live at a `/search/view/...` path).
+    let viewURL: URL?
+
+    /// Whether this filing belongs to the given senator — a last name that
+    /// appears in the member's display name. The search results carry no state
+    /// or Bioguide ID to disambiguate further, same as the House index's
+    /// last-name fallback.
+    func matches(_ representative: Representative) -> Bool {
+        representative.name.localizedCaseInsensitiveContains(last)
+    }
+}
+
+/// The eFD search endpoint's DataTables-style JSON response: each row is
+/// [first name, last name, office, link HTML, submitted date].
+private struct SenateSearchResponse: Decodable {
+    let recordsTotal: Int
+    let data: [[String]]
+}
+
+/// Characters left unescaped in a form-encoded value — RFC 3986's unreserved
+/// set. Everything else (spaces, colons, brackets) is percent-encoded, since
+/// Django's form parser expects a strictly escaped body.
+private let formValueAllowedCharacters: CharacterSet = {
+    var set = CharacterSet.alphanumerics
+    set.insert(charactersIn: "-._~")
+    return set
+}()
+
+/// The "MM/dd/yyyy HH:mm:ss" timestamps the eFD search endpoint expects for
+/// its submitted-date window.
+private let senateQueryDateFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(identifier: "America/New_York")
+    formatter.dateFormat = "MM/dd/yyyy HH:mm:ss"
+    return formatter
+}()
 
 private extension Representative {
     /// The state + zero-padded district code the House index uses, e.g. "CA12".

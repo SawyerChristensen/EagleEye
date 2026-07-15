@@ -233,6 +233,7 @@ final class RepresentativesStore {
         async let assignments = committeeService.committeeAssignments()
         async let socialLinks = contactService.socialLinksByBioguide()
         async let houseReports = disclosureService.houseTransactionReports()
+        async let senateReports = disclosureService.senateTransactionReports()
         async let fecCandidates = financeService.isConfigured
             ? financeService.candidateIDsByBioguide()
             : [:]
@@ -265,6 +266,7 @@ final class RepresentativesStore {
         let socialByID = await socialLinks
         let candidatesByID = await fecCandidates
         let reports = await houseReports
+        let senateFilings = await senateReports
 
         // Look up each member's top PAC and individual funders concurrently,
         // keyed off the FEC crosswalk. Skipped entirely (empty crosswalk) when no
@@ -301,7 +303,7 @@ final class RepresentativesStore {
                 ? rep
                 : rep.withFunders(pac: funders.pac, individual: funders.individual)
             rep = rep.withTradingActivity(
-                disclosureService.tradingActivity(for: rep, houseReports: reports)
+                disclosureService.tradingActivity(for: rep, houseReports: reports, senateReports: senateFilings)
             )
             if let performance = marketService.performance(for: rep) {
                 rep = rep.withMarketPerformance(performance)

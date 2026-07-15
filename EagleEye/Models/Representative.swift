@@ -186,18 +186,18 @@ struct ContactInfo: Codable, Hashable {
 
 /// A summary of a member's stock-trade disclosures under the STOCK Act, shown
 /// on the profile. Built from the House Clerk's Periodic Transaction Report
-/// (PTR) index; the Senate publishes its filings separately and isn't covered
-/// here yet, so senators carry a link-only summary.
+/// (PTR) index for representatives, or the Senate eFD search for senators.
 struct TradingActivity: Codable, Hashable {
     /// Number of Periodic Transaction Reports filed in the trailing window.
     let recentReportCount: Int
     /// Date of the most recent Periodic Transaction Report, if any.
     let latestReportDate: Date?
-    /// A link to view the member's disclosures — the most recent PTR itself for
-    /// House members, or the Senate eFD search for senators.
+    /// A link to view the member's disclosures — the most recent filing itself,
+    /// or a generic search portal if that couldn't be resolved.
     let disclosureURL: URL?
-    /// Whether this reflects the member's real filed reports (House) rather than
-    /// just a pointer to where their filings live (Senate).
+    /// Whether this reflects the member's real filed reports rather than just a
+    /// pointer to where their filings live (e.g. the disclosure source was
+    /// unreachable).
     let isCovered: Bool
 
     init(

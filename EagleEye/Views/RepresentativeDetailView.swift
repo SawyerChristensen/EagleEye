@@ -209,8 +209,8 @@ struct RepresentativeDetailView: View {
         if let note = MarketPerformanceService().abstention(for: representative) {
             return .abstains(note: note)
         }
-        // The House disclosure index gives a real recent-trade count; senators
-        // aren't covered by it, so they fall through to the generic report link.
+        // Both chambers' disclosure sources give a real recent-trade count; if
+        // that source couldn't be reached, fall through to the generic link.
         if let activity = representative.tradingActivity, activity.isCovered {
             return activity.recentReportCount > 0 ? .tradesUnranked : .noRecentTrades
         }
@@ -259,16 +259,16 @@ struct RepresentativeDetailView: View {
         }
     }
 
-    /// STOCK Act stock-trade disclosures. For House members this is a real count
-    /// of Periodic Transaction Reports; senators (whose filings this data source
-    /// doesn't cover) get a pointer to the Senate's own portal.
+    /// STOCK Act stock-trade disclosures — a real count of Periodic Transaction
+    /// Reports from the House Clerk's index or the Senate eFD search, whichever
+    /// covers the member's chamber.
     @ViewBuilder
     private var tradingSection: some View {
         if let activity = representative.tradingActivity {
             ProfileSection(title: "Stock Trades", systemImage: "chart.line.uptrend.xyaxis") {
                 VStack(alignment: .leading, spacing: 10) {
                     if !activity.isCovered {
-                        EmptyNote("Senate stock-trade filings aren't machine-readable here yet — view them on the Senate's disclosure portal.")
+                        EmptyNote("Stock-trade filings aren't available right now — view them on the disclosure portal.")
                     } else if activity.recentReportCount > 0 {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             Text("\(activity.recentReportCount)")
@@ -290,7 +290,7 @@ struct RepresentativeDetailView: View {
                     if let url = activity.disclosureURL {
                         ContactRow(
                             systemImage: "arrow.up.right.square",
-                            text: activity.isCovered ? "View latest filing" : "View on Senate eFD",
+                            text: activity.isCovered ? "View latest filing" : "View disclosure portal",
                             url: url
                         )
                     }
