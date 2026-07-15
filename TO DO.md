@@ -60,7 +60,7 @@
 
 ## 0.4 — Interactive Map
 
-- [ ] Build the interactive map view (evaluate performance and utility)
+- [x] Build the interactive map view (evaluate performance and utility)
   - [ ] Find borders of all congressional districts give them small borders. Find borders for states and give them thicker borders
   - [ ] Fill the congressional districts with party color, with each representative in the middle of the district or the district capitol (if there is one)
     - [ ] If a distrct is tapped on, the name of the district should pop up on a sheet that only fills the bottom half of the screen. the sheet should be draggable if the user wants to drag it up so that it fills all of the screen (it can still be dragged down and dismissed)
