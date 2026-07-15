@@ -274,7 +274,9 @@ struct RepresentativeDetailView: View {
                             Text("\(activity.recentReportCount)")
                                 .font(.title.bold())
                                 .contentTransition(.numericText())
-                            Text("stock-trade disclosure\(activity.recentReportCount == 1 ? "" : "s") in the past year")
+                            Text(activity.recentReportCount == 1
+                                ? String(localized: "stock-trade disclosure in the past year", comment: "Label next to a count of 1, describing a stock-trade disclosure filed in the past year.")
+                                : String(localized: "stock-trade disclosures in the past year", comment: "Label next to a count greater than 1, describing stock-trade disclosures filed in the past year."))
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }

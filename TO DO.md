@@ -77,7 +77,9 @@
   - [x] Bills
   - [x] Representative information *(cached as part of the delegation in `RepresentativesStore`'s `DelegationCache`; survives offline relaunches since `refreshUsingCachedLocation` runs silently and leaves the cache untouched on failure)*
   - [x] Voting histories *(`CongressService.enrichedProfile`/`SenateService.votingHistory` populate `Representative.keyVotes`, which is part of the same cached delegation)*
-- [ ] Localization framework setup for multi-language support (Spanish, French, etc.)
+- [x] Localization framework setup for multi-language support (Spanish, other languages most spoken in america, etc.) start with spanish
+  - [x] A complete spanish trnaslation in localizable
+  - [x] localized cf bundle display names
 
 ---
 

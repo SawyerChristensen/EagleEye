@@ -467,10 +467,14 @@ private struct VoteTallyView: View {
 
     private var legend: some View {
         HStack(spacing: 12) {
-            legendItem("Yea", tally.yea, .green)
-            legendItem("Nay", tally.nay, .red)
-            if tally.present > 0 { legendItem("Present", tally.present, .orange) }
-            if tally.notVoting > 0 { legendItem("N/V", tally.notVoting, .gray) }
+            legendItem(String(localized: "Yea", comment: "Legend label for members who voted yes."), tally.yea, .green)
+            legendItem(String(localized: "Nay", comment: "Legend label for members who voted no."), tally.nay, .red)
+            if tally.present > 0 {
+                legendItem(String(localized: "Present", comment: "Legend label for members who voted present without taking a position."), tally.present, .orange)
+            }
+            if tally.notVoting > 0 {
+                legendItem(String(localized: "N/V", comment: "Legend label abbreviation for members who did not vote."), tally.notVoting, .gray)
+            }
         }
         .font(.caption)
     }
@@ -581,10 +585,10 @@ private func positionColor(_ position: VotePosition) -> Color {
 
 private func positionShort(_ position: VotePosition) -> String {
     switch position {
-    case .yea: "Yea"
-    case .nay: "Nay"
-    case .present: "Present"
-    case .notVoting: "N/V"
+    case .yea: String(localized: "Yea", comment: "Short badge label for a “yea” vote.")
+    case .nay: String(localized: "Nay", comment: "Short badge label for a “nay” vote.")
+    case .present: String(localized: "Present", comment: "Short badge label for a member who voted present without taking a position.")
+    case .notVoting: String(localized: "N/V", comment: "Short badge label abbreviation for a member who did not vote.")
     }
 }
 
