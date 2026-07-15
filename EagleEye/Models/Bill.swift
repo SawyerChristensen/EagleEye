@@ -417,6 +417,13 @@ extension Bill {
     /// stays ahead of brand-new committee activity for roughly three weeks.
     private static let progressInfluence = 0.9
 
+    /// An extra flat boost for laws that actually took effect. Enacted bills
+    /// are the most consequential outcome the feed can show — this keeps them
+    /// outranking fresh committee churn for noticeably longer than their
+    /// `progressWeight` alone would, even though that weight already sits at
+    /// the top of the 0–1 scale.
+    private static let enactedBonus = 0.2
+
     /// A ranking score that surfaces consequential legislation first: it rises
     /// with how far the bill has advanced and decays as its most recent action
     /// ages. Progress leads — an enacted law or a floor defeat outranks committee
@@ -429,7 +436,8 @@ extension Bill {
         // Progress leads and recency modulates: weighting progress above recency's
         // 0–1 range keeps high-stage bills on top while still letting genuinely
         // recent action surface and stale bills sink over time.
-        return Self.progressInfluence * progressWeight + recency
+        let bonus = (status == .enacted && !failed) ? Self.enactedBonus : 0
+        return Self.progressInfluence * progressWeight + recency + bonus
     }
 }
 

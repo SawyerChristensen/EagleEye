@@ -113,5 +113,5 @@
 ---
 
 ## ⚙️ Refactoring & Code Optimization
-- [ ] Maybe make enacted laws have a higher waiting in the algorithm
+- [x] Maybe make enacted laws have a higher waiting in the algorithm
 - [x] Apple's location is sometimes vague (for privacy) and returns the wrong representative — let the user type in a ZIP code manually as a fallback (or as an option before we even ask for location)
