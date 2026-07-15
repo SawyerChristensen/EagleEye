@@ -24,8 +24,9 @@ struct DistrictMapView: View {
         NavigationStack {
             Map(position: $position) {
                 ForEach(mappable) { rep in
-                    Marker(rep.name, systemImage: markerSymbol(for: rep), coordinate: rep.coordinate)
-                        .tint(markerColor(for: rep))
+                    Annotation(rep.name, coordinate: rep.coordinate) {
+                        RepresentativePortrait(representative: rep, size: 40, style: .outline)
+                    }
                 }
 
                 UserAnnotation()
@@ -36,18 +37,6 @@ struct DistrictMapView: View {
             }
             .navigationTitle("District Map")
             .navigationBarTitleDisplayMode(.inline)
-        }
-    }
-
-    private func markerSymbol(for rep: Representative) -> String {
-        rep.office == .senator ? "building.columns.fill" : "person.fill"
-    }
-
-    private func markerColor(for rep: Representative) -> Color {
-        switch rep.party {
-        case .democrat: .blue
-        case .republican: .red
-        case .independent: .purple
         }
     }
 }
