@@ -65,7 +65,7 @@
 - [ ] Build the interactive map view (evaluate performance and utility)
   - [x] The icons of representatives are currently misplaced. Jeff Merkley appears off the coast of Africa instead of in Washington DC. Actually, skip placing senators for now. but something wasnt working for him to be placed there
     - [x] Pictures dont show up over the representatives name. Their icons should show up like they do in the list view
-  - [ ] Find borders of all congressional districts give them small borders. Find borders for states and give them thicker borders
+  - [x] Find borders of all congressional districts give them small borders. Find borders for states and give them thicker borders
   - [ ] Fill the congressional districts with party color, with each representative in the middle of the district or the district capitol (if there is one)
     - [ ] If a distrct is tapped on, the name of the district should pop up on a sheet that only fills the bottom half of the screen. the sheet should be draggable if the user wants to drag it up so that it fills all of the screen (it can still be dragged down and dismissed)
     - [ ] The sheet should have the district name with a copy of the district outline on the right and the representatives profile underneath it. This of course can be expanded as described above
