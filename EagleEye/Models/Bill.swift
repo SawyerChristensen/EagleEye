@@ -177,6 +177,15 @@ struct Bill: Identifiable, Codable, Hashable {
     /// The measure number as a string, e.g. "1842".
     let billNumber: String?
 
+    /// A stable identifier for the bill across separate fetches, used to persist
+    /// bookmarks and detect status changes between refreshes — unlike `id`,
+    /// which is a fresh UUID every time a bill is decoded from the API. `nil`
+    /// for sample data, which has no live counterpart.
+    var stableKey: String? {
+        guard let congress, let billType, let billNumber else { return nil }
+        return "\(congress)-\(billType)-\(billNumber)"
+    }
+
     init(
         id: UUID = UUID(),
         title: String,

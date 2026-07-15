@@ -17,6 +17,7 @@ struct ContentView: View {
     @State private var selection: AppTab = .home
     @State private var store = RepresentativesStore()
     @State private var billsStore = BillsStore()
+    @State private var bookmarksStore = BookmarksStore()
     @State private var location = LocationManager()
 
     var body: some View {
@@ -39,7 +40,7 @@ struct ContentView: View {
                 .task {
                     // Load the home feed of bills (uses cached results first,
                     // then refreshes from the API).
-                    await billsStore.load()
+                    await refreshBills()
                 }
         }
     }
@@ -61,7 +62,7 @@ struct ContentView: View {
                     isLoading: billsStore.loadState == .loading,
                     statusMessage: billsStore.statusMessage,
                     isLoadingMore: billsStore.isLoadingMore,
-                    onRefresh: billsStore.load,
+                    onRefresh: refreshBills,
                     onLoadMore: billsStore.loadMore
                 )
             }
@@ -82,6 +83,14 @@ struct ContentView: View {
                 lastName: MemberVote.lastName(fromDisplayName: $0.name)
             )
         }))
+        .environment(bookmarksStore)
+    }
+
+    /// Refreshes the home feed, then checks whether any bookmarked bill's
+    /// status changed since the last refresh, notifying the user if so.
+    private func refreshBills() async {
+        await billsStore.load()
+        bookmarksStore.checkForUpdates(in: billsStore.bills)
     }
 
     /// Asks for the user's location, then loads their delegation. Stays on the

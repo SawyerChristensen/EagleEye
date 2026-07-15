@@ -17,6 +17,7 @@ struct BillDetailView: View {
     /// senators are matched by a state+surname key instead.
     @Environment(\.userRepBioguideIDs) private var userRepIDs
     @Environment(\.userRepMatchKeys) private var userRepMatchKeys
+    @Environment(BookmarksStore.self) private var bookmarksStore
 
     private let service = CongressService()
     @State private var voteLoad: VoteLoadState = .loading
@@ -117,6 +118,20 @@ struct BillDetailView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 BillTitleLabel(code: bill.displayCode)
+            }
+            if bill.stableKey != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    let isBookmarked = bookmarksStore.isBookmarked(bill)
+                    Button {
+                        bookmarksStore.toggleBookmark(for: bill)
+                    } label: {
+                        Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
+                    }
+                    .accessibilityLabel(isBookmarked
+                        ? String(localized: "Remove Bookmark", comment: "Accessibility label for the button that un-bookmarks a bill.")
+                        : String(localized: "Bookmark", comment: "Accessibility label for the button that bookmarks a bill so the user is notified when its status changes.")
+                    )
+                }
             }
         }
         .task { await loadVotes() }
@@ -677,4 +692,5 @@ struct MemberBillDetailView: View {
     NavigationStack {
         BillDetailView(bill: SampleData.bills[0])
     }
+    .environment(BookmarksStore())
 }
