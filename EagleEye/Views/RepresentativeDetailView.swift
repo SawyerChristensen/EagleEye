@@ -20,6 +20,15 @@ struct RepresentativeDetailView: View {
         case money = "Money"
 
         var id: Self { self }
+
+        /// The SF Symbol shown beside the tab's title in the segmented control.
+        var systemImage: String {
+            switch self {
+            case .about: "info.circle"
+            case .votes: "checklist"
+            case .money: "banknote"
+            }
+        }
     }
 
     @State private var selectedTab: ProfileTab = .about
@@ -39,7 +48,7 @@ struct RepresentativeDetailView: View {
 
                 Picker("Section", selection: $selectedTab) {
                     ForEach(ProfileTab.allCases) { tab in
-                        Text(tab.rawValue).tag(tab)
+                        Label(tab.rawValue, systemImage: tab.systemImage).tag(tab)
                     }
                 }
                 .pickerStyle(.segmented)

@@ -48,18 +48,24 @@
 - [ ] "Beats the market" / insider-trading / corruption meter *(needs a trading-disclosure data source)*
   - [x] Trading-activity indicator — House Periodic Transaction Report (PTR) count for the past year, latest-filing date, and a link to the filing, from the free House Clerk disclosure index (on-device ZIP + TSV parsing, no key). Senators link out to the Senate eFD portal.
   - [ ] Senate coverage — parse efdsearch.senate.gov (agreement + CSRF + DataTables JSON) for senators' PTRs
-  - [ ] "Beats the market" quantitative metric — parse each PTR PDF into transactions (ticker, buy/sell, amount range, date) + pull historical prices to compute returns vs. a benchmark *(realistically a backend job, not on-device)*
+  - [ ] "Beats the market" quantitative metric — parse each PTR PDF into transactions (ticker, buy/sell, amount range, date) + pull historical prices to compute returns vs. a benchmark *(realistically a backend job, not on-device) if not doable in a short amount of time, move this feature as a post launch feature and this to do list item)*
 - [x] Add 3 tabs to the representative view. 1st tab is about (Committees, Bills, Contact info), 2nd tab is voting history (show the full title for each bill as it appears on the home feed, with an arrow to view the bills full details, should go to the same screen we end up on if tapped on from the home screen), 3rd tab should be the money tab the ("Beats the market"/ insider-trading / corruption meter), stock trades, top PAC funders,  top individual funders
   - [x] Add top individual funders, specify they are employees if the category is a company. if "Attorney" expand to plural form ie "Attornies"
-  - [ ] About shoud have an "i" icon, Votes the voting history icon, and money a dollar bill sf symbol in the tab view next to the text
-- [ ] Locating seems to take a LONG time. How about we progress to the home "recent bills" section while this is happening? Only kicking back to the loading screen if theres some sort of error?
+  - [x] About section shoud have an "i" icon, Votes the voting history icon, and money a dollar bill sf symbol in the tab view next to the text
+- [ ] Expand the recent bills section to load more if the user reaches the bottom of the feed
+- [ ] Locating seems to take a LONG time. How about we progress to the home "recent bills" section while this is happening and location detection continues in the background? Only kicking back to the loading screen if theres some sort of error?
 
 ---
 
 ## 0.4 — Interactive Map
 
-- [ ] Build the interactive map view (evaluate performance and utility): fill districts with party color, representative icon in the middle
-  - [ ] Zoom out to state level to see governor + senators
+- [ ] Build the interactive map view (evaluate performance and utility)
+  - [ ] Find borders of all congressional districts give them small borders. Find borders for states and give them thicker borders
+  - [ ] Fill the congressional districts with party color, with each representative in the middle of the district or the district capitol (if there is one)
+    - [ ] If a distrct is tapped on, the name of the district should pop up on a sheet that only fills the bottom half of the screen. the sheet should be draggable if the user wants to drag it up so that it fills all of the screen (it can still be dragged down and dismissed)
+    - [ ] The sheet should have the district name with a copy of the district outline on the right and the representatives profile underneath it. This of course can be expanded as described above
+  - [ ] Zoom out to state level to see governor + senators. display the icons as triangles with the govenor on top. The state outline should be filled with the state flag instead of a single party color.
+    - [ ] The transition between the different color coded district outlines and the state flag/state level representatives should be smooth
 
 ---
 
@@ -75,16 +81,31 @@
 ---
 
 ## 0.6 — iOS integration
-- [ ] Add home screen widgets
-- [ ] Add system notifications for new bills being passed, maybe the ability to bookmark a bill to recieve all notifications about it. 
+
+- [ ] Add home screen widgets that show what would be shown as the top bill in the recent bills feed
+- [ ] Add system notifications for new bills being passed
+  - [ ] Recently enacted laws should be a push notification
+  - [ ] Add the ability to bookmark a bill to recieve all notifications about it
 
 ---
 
 ## Version 1.0
-Modify ReadME
+- [ ] Organize project
+- [ ] Modify ReadME
 #### Release!
 
 
+---
+
+## Version 1.1
+
+- [ ] Add information about if a senator beats the market. Pre calculate this and add this as a hard value in an update if there is no online source readily available
+- [ ] Add information on state legislatures somewhere behind a Poltica+ IAP
+- [ ] Detect if an election is going on, default to the map view and report information about the election through the Poltica+ IAP
+- [ ] Add information about other countries presidents & congresses behind a Poltica+ IAP
+  - [ ] Update the map to have other countries outlines, do what google does when referencing disputed areas
+  - [ ] Each country should have its flag as its outline, with the president/prime minister/king/leader of the country as the icon
+  - [ ] Tapping on a country should give a country level description of its political process. This summary should roughly look the same across countries. IE similar paragraph topics
 
 ---
 
