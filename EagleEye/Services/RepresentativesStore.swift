@@ -254,14 +254,22 @@ final class RepresentativesStore {
                     let office = await contactService.officeInfo(forBioguideID: rep.bioguideID)
                     // Stash the office fields on `contact` for now; social links
                     // are folded in below once the shared dataset resolves.
-                    let withOffice = office.map {
+                    var withOffice = office.map {
                         enriched.withContact(ContactInfo(
                             officeAddress: $0.officeAddress,
                             phone: $0.phone,
                             website: $0.website
                         ))
+                    } ?? enriched
+                    // Geocode the Washington office address for the map tab, so
+                    // members show up on Capitol Hill instead of at (0, 0).
+                    if let address = office?.officeAddress,
+                       let coordinate = try? await CLGeocoder().geocodeAddressString(address).first?.location?.coordinate {
+                        withOffice = withOffice.withCoordinate(
+                            latitude: coordinate.latitude, longitude: coordinate.longitude
+                        )
                     }
-                    return (index, withOffice ?? enriched)
+                    return (index, withOffice)
                 }
             }
             var enriched = delegation

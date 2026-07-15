@@ -290,6 +290,13 @@ struct Representative: Identifiable, Codable, Hashable {
         CLLocationCoordinate2D(latitude: officeLatitude, longitude: officeLongitude)
     }
 
+    /// Whether the office coordinate has been geocoded, as opposed to still
+    /// sitting at the (0, 0) default — off the coast of Africa, not useful on
+    /// a map.
+    var hasResolvedCoordinate: Bool {
+        officeLatitude != 0 || officeLongitude != 0
+    }
+
     /// Returns a copy with the sponsored and cosponsored bill lists replaced,
     /// used to fill in those profile sections after the member's legislation is
     /// loaded from Congress.gov.
@@ -440,6 +447,33 @@ struct Representative: Identifiable, Codable, Hashable {
             bioguideID: bioguideID,
             officeLatitude: officeLatitude,
             officeLongitude: officeLongitude,
+            portraitURL: portraitURL,
+            tenureStart: tenureStart,
+            committees: committees,
+            keyVotes: keyVotes,
+            sponsoredBills: sponsoredBills,
+            cosponsoredBills: cosponsoredBills,
+            funders: funders,
+            individualFunders: individualFunders,
+            contact: contact,
+            tradingActivity: tradingActivity,
+            marketPerformance: marketPerformance
+        )
+    }
+
+    /// Returns a copy with the office coordinate filled in, used after the
+    /// member's Washington office address is geocoded for the map tab.
+    func withCoordinate(latitude: Double, longitude: Double) -> Representative {
+        Representative(
+            id: id,
+            name: name,
+            party: party,
+            office: office,
+            state: state,
+            district: district,
+            bioguideID: bioguideID,
+            officeLatitude: latitude,
+            officeLongitude: longitude,
             portraitURL: portraitURL,
             tenureStart: tenureStart,
             committees: committees,

@@ -63,7 +63,7 @@
 ## 0.4 — Interactive Map
 
 - [ ] Build the interactive map view (evaluate performance and utility)
-  - [ ] The icons of representatives are currently misplaced. Jeff Merkley appears off the coast of Africa instead of in Washington DC. Actually, skip placing senators for now. but something wasnt working for him to be placed there
+  - [x] The icons of representatives are currently misplaced. Jeff Merkley appears off the coast of Africa instead of in Washington DC. Actually, skip placing senators for now. but something wasnt working for him to be placed there
     - [ ] Pictures dont show up over the representatives name. Their icons should show up like they do in the list view
   - [ ] Find borders of all congressional districts give them small borders. Find borders for states and give them thicker borders
   - [ ] Fill the congressional districts with party color, with each representative in the middle of the district or the district capitol (if there is one)
