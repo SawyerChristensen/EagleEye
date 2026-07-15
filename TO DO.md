@@ -56,7 +56,7 @@
 - [x] Locating seems to take a LONG time. How about we progress to the home "recent bills" section while this is happening and location detection continues in the background? Only kicking back to the loading screen if theres some sort of error?
   - [x] This works, but kind of. right now the user taps "locate" and view instantly progresses to the home recent bills section at the same time apple system prompt shows up asking the user if they want to share their exact or approximate location. the view should only progress after the user makes a choice in this selection. before then, while the apple location prompt is up on the screen, the user should still see the onboarding location view in the background.
 - [x] Transition the "Your Representatives" section into having their party color as a shadow rather than an outline. Have a simpler list. Maybe comment out how we build the current view so that we can use it later. Now it should be a list where the most senior senator is one top, followed by the other senator, with the representative on bottom. This should replace the 2-a-row feature we have right now and there should be lines in between each
-- [ ] Some of the icons are a little dark. Is there anything similar to the photos app "magic wand" feature that automatically makes photos look good? That should be applied to each photo we get to automatically fix any lighting issues in their official portrait
+- [x] Some of the icons are a little dark. Is there anything similar to the photos app "magic wand" feature that automatically makes photos look good? That should be applied to each photo we get to automatically fix any lighting issues in their official portrait
 
 ---
 

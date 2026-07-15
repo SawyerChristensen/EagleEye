@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import CoreImage
 
 #if canImport(UIKit)
 import UIKit
@@ -50,8 +51,9 @@ actor ImageCache {
 
         let fileURL = directory.appendingPathComponent(key as String)
         if let data = try? Data(contentsOf: fileURL), let image = PlatformImage(data: data) {
-            memory.setObject(image, forKey: key)
-            return image
+            let enhanced = Self.autoEnhanced(image)
+            memory.setObject(enhanced, forKey: key)
+            return enhanced
         }
 
         // Coalesce concurrent requests for the same URL onto one download.
@@ -66,7 +68,7 @@ actor ImageCache {
                 return nil
             }
             try? data.write(to: directory.appendingPathComponent(key as String))
-            return image
+            return Self.autoEnhanced(image)
         }
         inFlight[url] = task
         let image = await task.value
@@ -82,6 +84,38 @@ actor ImageCache {
     private static func key(for url: URL) -> NSString {
         let encoded = url.absoluteString.addingPercentEncoding(withAllowedCharacters: .alphanumerics)
         return (encoded ?? String(abs(url.absoluteString.hashValue))) as NSString
+    }
+
+    private static let ciContext = CIContext()
+
+    /// Applies the same auto-enhance adjustments as Photos' "magic wand" (exposure,
+    /// contrast, shadow, and highlight correction) so dim or poorly lit official
+    /// portraits look consistently good without any manual editing.
+    private static func autoEnhanced(_ image: PlatformImage) -> PlatformImage {
+        #if canImport(UIKit)
+        guard let cgSource = image.cgImage else { return image }
+        #elseif canImport(AppKit)
+        guard let cgSource = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return image }
+        #endif
+
+        var ciImage = CIImage(cgImage: cgSource)
+        let filters = ciImage.autoAdjustmentFilters()
+        guard !filters.isEmpty else { return image }
+
+        for filter in filters {
+            filter.setValue(ciImage, forKey: kCIInputImageKey)
+            if let output = filter.outputImage {
+                ciImage = output
+            }
+        }
+
+        guard let cgOutput = ciContext.createCGImage(ciImage, from: ciImage.extent) else { return image }
+
+        #if canImport(UIKit)
+        return UIImage(cgImage: cgOutput, scale: image.scale, orientation: image.imageOrientation)
+        #elseif canImport(AppKit)
+        return NSImage(cgImage: cgOutput, size: image.size)
+        #endif
     }
 }
 
