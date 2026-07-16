@@ -21,6 +21,7 @@ struct DistrictMapView: View {
     @State private var selectedDistrict: MapBoundary?
     @State private var hasSetInitialRegion = false
     @State private var hasCenteredOnUserDistrict = false
+    @State private var isCenteredOnUserDistrict = false
     @State private var worldMask: MKPolygon?
     @State private var nationalHouseDirectory = NationalHouseDirectory()
 
@@ -89,6 +90,9 @@ struct DistrictMapView: View {
                 .onTapGesture { screenPoint in
                     guard let coordinate = proxy.convert(screenPoint, from: .local) else { return }
                     selectedDistrict = districtBoundaries.first { $0.contains(coordinate) }
+                }
+                .onMapCameraChange(frequency: .onEnd) { context in
+                    isCenteredOnUserDistrict = isRegion(context.region, centeredOn: userDistrictBoundary)
                 }
                 // `.mapControls` is built for MapKit's own control types (MapCompass,
                 // MapUserLocationButton, etc.) — a plain custom Button placed inside it
@@ -246,7 +250,20 @@ struct DistrictMapView: View {
     private func centerOnUserDistrictIfNeeded() {
         guard !hasCenteredOnUserDistrict, let boundary = userDistrictBoundary else { return }
         hasCenteredOnUserDistrict = true
+        isCenteredOnUserDistrict = true
         position = .region(region(for: boundary))
+    }
+
+    /// Whether a camera region is still roughly framing the user's district,
+    /// i.e. close enough to what `recenterButton` last set that panning or
+    /// zooming hasn't meaningfully moved away from it yet.
+    private func isRegion(_ region: MKCoordinateRegion, centeredOn boundary: MapBoundary?) -> Bool {
+        guard let boundary else { return false }
+        let target = self.region(for: boundary)
+        let latTolerance = target.span.latitudeDelta * 0.25
+        let lonTolerance = target.span.longitudeDelta * 0.25
+        return abs(region.center.latitude - target.center.latitude) < latTolerance
+            && abs(region.center.longitude - target.center.longitude) < lonTolerance
     }
 
     /// Recenters on the user's district — framing the whole district rather
@@ -256,6 +273,7 @@ struct DistrictMapView: View {
     private var recenterButton: some View {
         Button {
             withAnimation {
+                isCenteredOnUserDistrict = true
                 if let boundary = userDistrictBoundary {
                     position = .region(region(for: boundary))
                 } else {
@@ -263,11 +281,14 @@ struct DistrictMapView: View {
                 }
             }
         } label: {
-            Image(systemName: "location.fill")
-                .font(.system(size: 14, weight: .medium))
-                .frame(width: 30, height: 30)
+            Image(systemName: isCenteredOnUserDistrict ? "location.fill" : "location")
+                .font(.system(size: 17, weight: .medium))
+                .frame(width: 38, height: 38)
         }
-        .background(.regularMaterial, in: Circle())
+        .background(.ultraThinMaterial, in: Circle())
+        .overlay(Circle().strokeBorder(.separator, lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+        .animation(.easeInOut(duration: 0.2), value: isCenteredOnUserDistrict)
     }
 
     /// The House member who represents a given district, if any is on file
