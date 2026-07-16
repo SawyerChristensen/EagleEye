@@ -15,6 +15,7 @@ struct DistrictMapView: View {
     @State private var stateBoundaries: [MapBoundary] = []
     @State private var districtBoundaries: [MapBoundary] = []
     @State private var selectedDistrict: MapBoundary?
+    @State private var hasCenteredOnUserDistrict = false
 
     /// Members to show as pins. Senators are excluded for now — they represent
     /// a whole state rather than a single district, so they have no "middle of
@@ -79,7 +80,9 @@ struct DistrictMapView: View {
                 async let states = Task.detached(priority: .userInitiated) { BoundaryLoader.loadStates() }.value
                 districtBoundaries = await districts
                 stateBoundaries = await states
+                centerOnUserDistrictIfNeeded()
             }
+            .onChange(of: representatives) { centerOnUserDistrictIfNeeded() }
             .sheet(item: $selectedDistrict) { boundary in
                 DistrictDetailSheet(
                     boundary: boundary,
@@ -156,6 +159,17 @@ struct DistrictMapView: View {
             longitudeDelta: max((maxLon - minLon) * 1.3, 0.3)
         )
         return MKCoordinateRegion(center: center, span: span)
+    }
+
+    /// Frames the user's district edge-to-edge the first time both their
+    /// representative and the district geometry are available, so the map
+    /// opens already centered on home rather than on MapKit's generic
+    /// default view. Only fires once — after that, the user's own panning
+    /// and zooming takes over.
+    private func centerOnUserDistrictIfNeeded() {
+        guard !hasCenteredOnUserDistrict, let boundary = userDistrictBoundary else { return }
+        hasCenteredOnUserDistrict = true
+        position = .region(region(for: boundary))
     }
 
     /// Recenters on the user's district — framing the whole district rather
