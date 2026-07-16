@@ -74,7 +74,7 @@
   - [x] Fix all project warnings
   - [ ] Zoom out to state level to see governor + senators. display the icons as triangles with the govenor on top. The state outline should be filled with the state flag instead of a single party color.
     - [ ] The transition between the different color coded district outlines and the state flag/state level representatives should be smooth
-    - [ ] The "go back to user location" button in the top right should not adjust zoom level too much. it shouldnt zoom in to their neighborhood. just their district, as that is what is relevant in this context
+    - [x] The "go back to user location" button in the top right should not adjust zoom level too much. it shouldnt zoom in to their neighborhood. just their district, as that is what is relevant in this context
 
 ---
 

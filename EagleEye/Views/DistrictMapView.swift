@@ -63,7 +63,7 @@ struct DistrictMapView: View {
                 }
                 .mapStyle(.standard(pointsOfInterest: .excludingAll, showsTraffic: false))
                 .mapControls {
-                    MapUserLocationButton()
+                    recenterButton
                     MapCompass()
                 }
                 .onTapGesture { screenPoint in
@@ -115,12 +115,68 @@ struct DistrictMapView: View {
         partyByDistrict[districtKey(state: boundary.state, district: boundary.district)]?.color ?? .clear
     }
 
+    /// The boundary matching a representative's state and district, if its
+    /// geometry has loaded.
+    private func districtBoundary(for rep: Representative) -> MapBoundary? {
+        let key = districtKey(state: rep.state, district: rep.district)
+        return districtBoundaries.first { districtKey(state: $0.state, district: $0.district) == key }
+    }
+
     /// The point at which to pin a representative: the geometric middle of
     /// their district, so members are spread across the map rather than
     /// clustered at their Washington office.
     private func districtCenter(for rep: Representative) -> CLLocationCoordinate2D? {
-        let key = districtKey(state: rep.state, district: rep.district)
-        return districtBoundaries.first { districtKey(state: $0.state, district: $0.district) == key }?.centroid
+        districtBoundary(for: rep)?.centroid
+    }
+
+    /// The boundary of the user's own district, i.e. their House member's
+    /// district — `mappable` only ever contains the user's own delegation.
+    private var userDistrictBoundary: MapBoundary? {
+        mappable.first.flatMap(districtBoundary(for:))
+    }
+
+    /// A region tightly framing a district's full extent (with a little
+    /// padding), rather than the tight "current position" zoom MapKit's
+    /// stock location button defaults to.
+    private func region(for boundary: MapBoundary) -> MKCoordinateRegion {
+        let points = boundary.rings.flatMap { $0 }
+        guard let minLat = points.map(\.latitude).min(),
+              let maxLat = points.map(\.latitude).max(),
+              let minLon = points.map(\.longitude).min(),
+              let maxLon = points.map(\.longitude).max()
+        else {
+            return MKCoordinateRegion(
+                center: boundary.centroid,
+                span: MKCoordinateSpan(latitudeDelta: 1, longitudeDelta: 1)
+            )
+        }
+        let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
+        let span = MKCoordinateSpan(
+            latitudeDelta: max((maxLat - minLat) * 1.3, 0.3),
+            longitudeDelta: max((maxLon - minLon) * 1.3, 0.3)
+        )
+        return MKCoordinateRegion(center: center, span: span)
+    }
+
+    /// Recenters on the user's district — framing the whole district rather
+    /// than zooming to their exact position, since the district (not the
+    /// neighborhood) is what's relevant here. Falls back to the stock
+    /// "current location" behavior if the district geometry isn't loaded yet.
+    private var recenterButton: some View {
+        Button {
+            withAnimation {
+                if let boundary = userDistrictBoundary {
+                    position = .region(region(for: boundary))
+                } else {
+                    position = .userLocation(fallback: .automatic)
+                }
+            }
+        } label: {
+            Image(systemName: "location.fill")
+                .font(.system(size: 14, weight: .medium))
+                .frame(width: 30, height: 30)
+        }
+        .background(.regularMaterial, in: Circle())
     }
 
     /// The House member who represents a given district, if any is on file
