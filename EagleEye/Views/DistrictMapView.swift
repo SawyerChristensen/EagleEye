@@ -14,6 +14,7 @@ struct DistrictMapView: View {
     @State private var position: MapCameraPosition = .automatic
     @State private var stateBoundaries: [MapBoundary] = []
     @State private var districtBoundaries: [MapBoundary] = []
+    @State private var selectedDistrict: MapBoundary?
 
     /// Members to show as pins. Senators are excluded for now — they represent
     /// a whole state rather than a single district, so they have no "middle of
@@ -33,36 +34,42 @@ struct DistrictMapView: View {
 
     var body: some View {
         NavigationStack {
-            Map(position: $position) {
-                ForEach(districtBoundaries) { boundary in
-                    ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
-                        MapPolygon(coordinates: closed(ring))
-                            .foregroundStyle(fillColor(for: boundary).opacity(0.28))
-                            .stroke(.secondary.opacity(0.5), lineWidth: 0.75)
-                    }
-                }
-
-                ForEach(stateBoundaries) { boundary in
-                    ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
-                        MapPolyline(coordinates: closed(ring))
-                            .stroke(.primary.opacity(0.85), lineWidth: 2)
-                    }
-                }
-
-                ForEach(mappable) { rep in
-                    if let coordinate = districtCenter(for: rep) {
-                        Annotation(rep.name, coordinate: coordinate) {
-                            RepresentativePortrait(representative: rep, size: 40, style: .outline)
+            MapReader { proxy in
+                Map(position: $position) {
+                    ForEach(districtBoundaries) { boundary in
+                        ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
+                            MapPolygon(coordinates: closed(ring))
+                                .foregroundStyle(fillColor(for: boundary).opacity(0.28))
+                                .stroke(.secondary.opacity(0.5), lineWidth: 0.75)
                         }
                     }
-                }
 
-                UserAnnotation()
-            }
-            .mapStyle(.standard(pointsOfInterest: .excludingAll, showsTraffic: false))
-            .mapControls {
-                MapUserLocationButton()
-                MapCompass()
+                    ForEach(stateBoundaries) { boundary in
+                        ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
+                            MapPolyline(coordinates: closed(ring))
+                                .stroke(.primary.opacity(0.85), lineWidth: 2)
+                        }
+                    }
+
+                    ForEach(mappable) { rep in
+                        if let coordinate = districtCenter(for: rep) {
+                            Annotation(rep.name, coordinate: coordinate) {
+                                RepresentativePortrait(representative: rep, size: 40, style: .outline)
+                            }
+                        }
+                    }
+
+                    UserAnnotation()
+                }
+                .mapStyle(.standard(pointsOfInterest: .excludingAll, showsTraffic: false))
+                .mapControls {
+                    MapUserLocationButton()
+                    MapCompass()
+                }
+                .onTapGesture { screenPoint in
+                    guard let coordinate = proxy.convert(screenPoint, from: .local) else { return }
+                    selectedDistrict = districtBoundaries.first { $0.contains(coordinate) }
+                }
             }
             .navigationTitle("District Map")
             .navigationBarTitleDisplayMode(.inline)
@@ -72,6 +79,16 @@ struct DistrictMapView: View {
                 async let states = Task.detached(priority: .userInitiated) { BoundaryLoader.loadStates() }.value
                 districtBoundaries = await districts
                 stateBoundaries = await states
+            }
+            .sheet(item: $selectedDistrict) { boundary in
+                Text(boundary.displayName)
+                    .font(.title2.bold())
+                    .multilineTextAlignment(.center)
+                    .padding()
+                    .padding(.top, 24)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
         }
     }

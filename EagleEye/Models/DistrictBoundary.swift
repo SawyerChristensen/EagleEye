@@ -28,6 +28,72 @@ struct MapBoundary: Identifiable {
         return Self.centroid(of: largestRing)
     }
 
+    /// A human-readable label for this boundary, e.g. "California's 12th
+    /// District" or "Wyoming's At-Large District".
+    var displayName: String {
+        let stateName = Self.stateNames[state] ?? state
+        guard let district, district != 0 else {
+            return "\(stateName)'s At-Large District"
+        }
+        return "\(stateName)'s \(Self.ordinal(district)) District"
+    }
+
+    /// Full state/territory names keyed by postal code, for display purposes.
+    private static let stateNames: [String: String] = [
+        "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
+        "CA": "California", "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware",
+        "DC": "District of Columbia", "FL": "Florida", "GA": "Georgia", "HI": "Hawaii",
+        "ID": "Idaho", "IL": "Illinois", "IN": "Indiana", "IA": "Iowa",
+        "KS": "Kansas", "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine",
+        "MD": "Maryland", "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota",
+        "MS": "Mississippi", "MO": "Missouri", "MT": "Montana", "NE": "Nebraska",
+        "NV": "Nevada", "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico",
+        "NY": "New York", "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio",
+        "OK": "Oklahoma", "OR": "Oregon", "PA": "Pennsylvania", "PR": "Puerto Rico",
+        "RI": "Rhode Island", "SC": "South Carolina", "SD": "South Dakota", "TN": "Tennessee",
+        "TX": "Texas", "UT": "Utah", "VT": "Vermont", "VA": "Virginia",
+        "WA": "Washington", "WV": "West Virginia", "WI": "Wisconsin", "WY": "Wyoming",
+        "AS": "American Samoa", "GU": "Guam", "MP": "Northern Mariana Islands",
+        "VI": "U.S. Virgin Islands",
+    ]
+
+    private static let ordinalFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .ordinal
+        return formatter
+    }()
+
+    private static func ordinal(_ number: Int) -> String {
+        ordinalFormatter.string(from: NSNumber(value: number)) ?? "\(number)"
+    }
+
+    /// Whether `point` falls inside this ring, via ray casting. Treats the
+    /// ring as planar in lat/lon degrees, which is accurate enough for
+    /// hit-testing a map tap against a district boundary.
+    static func ringContains(_ point: CLLocationCoordinate2D, _ ring: [CLLocationCoordinate2D]) -> Bool {
+        guard ring.count > 2 else { return false }
+        var inside = false
+        var j = ring.count - 1
+        for i in 0..<ring.count {
+            let pi = ring[i]
+            let pj = ring[j]
+            if (pi.latitude > point.latitude) != (pj.latitude > point.latitude) {
+                let slope = (pj.longitude - pi.longitude) / (pj.latitude - pi.latitude)
+                let intersectLongitude = pi.longitude + slope * (point.latitude - pi.latitude)
+                if point.longitude < intersectLongitude {
+                    inside.toggle()
+                }
+            }
+            j = i
+        }
+        return inside
+    }
+
+    /// Whether `point` falls inside any of this boundary's rings.
+    func contains(_ point: CLLocationCoordinate2D) -> Bool {
+        rings.contains { Self.ringContains(point, $0) }
+    }
+
     /// Signed area of a ring via the shoelace formula (positive/negative
     /// indicates winding order; magnitude is what matters for ring size).
     private static func signedArea(_ ring: [CLLocationCoordinate2D]) -> Double {
