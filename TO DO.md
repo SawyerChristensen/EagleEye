@@ -77,7 +77,7 @@
     - [x] ^ this takes awhile to center. is this because everything is being retrieved, and then the users location is found? what if we center on the user at a certain wide zoom, and then adjust later?
     - [x] There should be a button that recenters the user on their home district. I CANNOT SEE THIS BUTTON. You have previously commit twice saying that there is a button. I cannot see any recentering button in the actual map
   - [x] Everything outside the US should be tinted a little grey, and geographic information like mountain ranges/basins shouldnt be visible. it clutters the map
-  - [ ] Retrieve ALL state representatives and their associated district in the backend of the app. we only display this in the map section
+  - [x] Retrieve ALL state representatives and their associated district in the backend of the app. we only display this in the map section
     - [ ] Do the same ^ for governors
     - [ ] Currently the district map filled with each parties color does not work. mine only worked when I tapped on the land around my location. Only then did it fill in with color and my local representatives icon appear. When I tap on other districts, they dont have a color, but a sheet still shows up. it just says something like "Oregon's 5th District" with no outline next to it or representative under it. Fix this first
     - [ ] After this is fixed ^ we should add more information per district. Each district should display some basic information about the district, like the population count, top sectors/industry, top cities by population, top universties, and anything else relevant to the district. it should still show the representative

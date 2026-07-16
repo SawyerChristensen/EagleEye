@@ -22,6 +22,7 @@ struct DistrictMapView: View {
     @State private var hasSetInitialRegion = false
     @State private var hasCenteredOnUserDistrict = false
     @State private var worldMask: MKPolygon?
+    @State private var nationalHouseDirectory = NationalHouseDirectory()
 
     /// Members to show as pins. Senators are excluded for now — they represent
     /// a whole state rather than a single district, so they have no "middle of
@@ -30,11 +31,12 @@ struct DistrictMapView: View {
         representatives.filter { $0.office == .representative }
     }
 
-    /// Each House member's party, keyed by state and district, used to tint
-    /// their district's fill on the map.
+    /// Every House member nationwide, keyed by state and district — used to
+    /// tint every district's fill and to answer "who represents this
+    /// district" for a tapped district, not just the user's own.
     private var partyByDistrict: [String: Party] {
         Dictionary(
-            mappable.map { (districtKey(state: $0.state, district: $0.district), $0.party) },
+            nationalHouseDirectory.members.map { (districtKey(state: $0.state, district: $0.district), $0.party) },
             uniquingKeysWith: { first, _ in first }
         )
     }
@@ -100,13 +102,16 @@ struct DistrictMapView: View {
                     hasSetInitialRegion = true
                     position = .region(wideRegion(centeredOn: userCoordinate))
                 }
-                guard districtBoundaries.isEmpty, stateBoundaries.isEmpty else { return }
-                async let districts = Task.detached(priority: .userInitiated) { BoundaryLoader.loadDistricts() }.value
-                async let states = Task.detached(priority: .userInitiated) { BoundaryLoader.loadStates() }.value
-                districtBoundaries = await districts
-                stateBoundaries = await states
-                worldMask = Self.buildWorldMask(from: stateBoundaries)
-                centerOnUserDistrictIfNeeded()
+                async let nationalLoad: Void = nationalHouseDirectory.loadIfNeeded()
+                if districtBoundaries.isEmpty, stateBoundaries.isEmpty {
+                    async let districts = Task.detached(priority: .userInitiated) { BoundaryLoader.loadDistricts() }.value
+                    async let states = Task.detached(priority: .userInitiated) { BoundaryLoader.loadStates() }.value
+                    districtBoundaries = await districts
+                    stateBoundaries = await states
+                    worldMask = Self.buildWorldMask(from: stateBoundaries)
+                    centerOnUserDistrictIfNeeded()
+                }
+                await nationalLoad
             }
             .onChange(of: representatives) { centerOnUserDistrictIfNeeded() }
             .sheet(item: $selectedDistrict) { boundary in
@@ -247,10 +252,12 @@ struct DistrictMapView: View {
     }
 
     /// The House member who represents a given district, if any is on file
-    /// (e.g. a non-voting delegate's district may have no match).
+    /// (e.g. a non-voting delegate's district may have no match). Looked up
+    /// nationwide so every district's sheet shows its own representative, not
+    /// just the user's home district.
     private func representative(for boundary: MapBoundary) -> Representative? {
         let key = districtKey(state: boundary.state, district: boundary.district)
-        return mappable.first { districtKey(state: $0.state, district: $0.district) == key }
+        return nationalHouseDirectory.members.first { districtKey(state: $0.state, district: $0.district) == key }
     }
 }
 
