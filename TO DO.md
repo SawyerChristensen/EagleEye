@@ -64,7 +64,7 @@
   - [ ] Instead of a Committees and bills section, just have a "Pills passed into law" section above the contact information. 
   - [ ] Still have the money section and fill it with top pac funders/top individual funders just like we do congressmen
 - [x] Seperate the senators/representatives from your governor in the "your representatives list". There should be a subheader that says "In Congress" and then "In [current state's capitol city]"
-- [ ] Confirm if the user is presented with the "share your location" text every time only during debugging with the current scheme
+- [x] Confirm if the user is presented with the "share your location" text every time only during debugging with the current scheme *(confirmed — the shared scheme's `-ResetDelegationCache` launch argument is enabled by default, and `RepresentativesStore.init()` wipes the cached delegation under `#if DEBUG` whenever it's present so onboarding can be retested; this compiles out entirely in Release/TestFlight/App Store builds, so real users only see the prompt once, after which the cached delegation skips straight to `.ready`)*
 - [x] Change the progress pill sf symbols. if it is in house committee, the sf symbol should be "person.3". if its in senate committee, it should be "person.3.fill". if its "to president" it should be "person.fill", if its enacted, it should be "scroll",
 - [ ] Make the representatives icons and text in their list slightly bigger
 - [ ] In the bill detail section, where there are progress pills under the title, they should display their associated sf symbol as well.
