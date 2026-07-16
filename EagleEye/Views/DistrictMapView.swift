@@ -81,14 +81,13 @@ struct DistrictMapView: View {
                 stateBoundaries = await states
             }
             .sheet(item: $selectedDistrict) { boundary in
-                Text(boundary.displayName)
-                    .font(.title2.bold())
-                    .multilineTextAlignment(.center)
-                    .padding()
-                    .padding(.top, 24)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
+                DistrictDetailSheet(
+                    boundary: boundary,
+                    color: fillColor(for: boundary),
+                    representative: representative(for: boundary)
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
             }
         }
     }
@@ -122,6 +121,98 @@ struct DistrictMapView: View {
     private func districtCenter(for rep: Representative) -> CLLocationCoordinate2D? {
         let key = districtKey(state: rep.state, district: rep.district)
         return districtBoundaries.first { districtKey(state: $0.state, district: $0.district) == key }?.centroid
+    }
+
+    /// The House member who represents a given district, if any is on file
+    /// (e.g. a non-voting delegate's district may have no match).
+    private func representative(for boundary: MapBoundary) -> Representative? {
+        let key = districtKey(state: boundary.state, district: boundary.district)
+        return mappable.first { districtKey(state: $0.state, district: $0.district) == key }
+    }
+}
+
+/// The sheet shown when a district is tapped: its name beside a copy of its
+/// outline, with the district's representative underneath.
+private struct DistrictDetailSheet: View {
+    let boundary: MapBoundary
+    let color: Color
+    let representative: Representative?
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 20) {
+                HStack(alignment: .top, spacing: 16) {
+                    Text(boundary.displayName)
+                        .font(.title2.bold())
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    DistrictOutlineShape(rings: boundary.rings)
+                        .fill(color.opacity(0.3))
+                        .overlay(DistrictOutlineShape(rings: boundary.rings).stroke(color, lineWidth: 1.5))
+                        .frame(width: 80, height: 80)
+                }
+
+                Divider()
+
+                if let representative {
+                    NavigationLink(value: representative) {
+                        RepresentativeRow(representative: representative)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Text("No representative currently on file for this district.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+            }
+            .padding()
+            .padding(.top, 16)
+            .navigationDestination(for: Representative.self) { rep in
+                RepresentativeDetailView(representative: rep)
+            }
+        }
+    }
+}
+
+/// Draws a district's boundary rings scaled to fit within the shape's rect,
+/// preserving aspect ratio — a small "thumbnail" copy of the outline shown
+/// on the map.
+private struct DistrictOutlineShape: Shape {
+    let rings: [[CLLocationCoordinate2D]]
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let points = rings.flatMap { $0 }
+        guard let minLat = points.map(\.latitude).min(),
+              let maxLat = points.map(\.latitude).max(),
+              let minLon = points.map(\.longitude).min(),
+              let maxLon = points.map(\.longitude).max()
+        else { return path }
+
+        let latSpan = max(maxLat - minLat, .ulpOfOne)
+        let lonSpan = max(maxLon - minLon, .ulpOfOne)
+        let scale = min(rect.width / lonSpan, rect.height / latSpan)
+        let originX = rect.minX + (rect.width - lonSpan * scale) / 2
+        let originY = rect.minY + (rect.height - latSpan * scale) / 2
+
+        func point(_ coordinate: CLLocationCoordinate2D) -> CGPoint {
+            CGPoint(
+                x: originX + (coordinate.longitude - minLon) * scale,
+                y: originY + (maxLat - coordinate.latitude) * scale
+            )
+        }
+
+        for ring in rings {
+            guard let first = ring.first else { continue }
+            path.move(to: point(first))
+            for coordinate in ring.dropFirst() {
+                path.addLine(to: point(coordinate))
+            }
+            path.closeSubpath()
+        }
+        return path
     }
 }
 

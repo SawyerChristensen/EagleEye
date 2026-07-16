@@ -99,8 +99,9 @@ struct RepresentativesView: View {
 }
 
 /// A single tappable representative in the list: a portrait with a party-color
-/// glow beside the member's name and role.
-private struct RepresentativeRow: View {
+/// glow beside the member's name and role. Also reused by the district map's
+/// sheet to show the representative for a tapped district.
+struct RepresentativeRow: View {
     let representative: Representative
 
     var body: some View {

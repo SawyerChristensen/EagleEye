@@ -70,7 +70,7 @@
   - [x] App crashed with: "Thread 45: EXC_RESOURCE (RESOURCE_TYPE_MEMORY: high watermark memory limit exceeded) (limit=3376 MB)"
   - [x] Fill the congressional districts with party color, with each representative in the middle of the district or the district capitol (if there is one) (THIS WAS PREVIOUSLY MARKED AS DONE. IT DOES NOT WORK. THE DISTRICTS DO NOT FILL WITH PARTY COLOR
     - [x] If a distrct is tapped on, the name of the district should pop up on a sheet that only fills the bottom half of the screen. the sheet should be draggable if the user wants to drag it up so that it fills all of the screen (it can still be dragged down and dismissed)
-    - [ ] The sheet should have the district name with a copy of the district outline on the right and the representatives profile underneath it. This of course can be expanded as described above
+    - [x] The sheet should have the district name with a copy of the district outline on the right and the representatives profile underneath it. This of course can be expanded as described above
   - [ ] Fix all project warnings
   - [ ] Zoom out to state level to see governor + senators. display the icons as triangles with the govenor on top. The state outline should be filled with the state flag instead of a single party color.
     - [ ] The transition between the different color coded district outlines and the state flag/state level representatives should be smooth
