@@ -47,11 +47,38 @@ struct TopBillProvider: TimelineProvider {
     }
 
     private static func fetchTopBill() async -> Bill? {
-        try? await CongressService().recentBills(limit: 1).first
+        try? await CongressService(apiKey: resolvedAPIKey()).recentBills(limit: 1).first
+    }
+
+    /// `Bundle.main` inside the widget extension resolves to the `.appex`'s own
+    /// bundle, not the app's, so `CongressService.configuredAPIKey`'s bundled
+    /// `Secrets.plist` lookup always comes up empty here — leaving every fetch
+    /// to fail with `missingAPIKey` and the widget stuck on "No bill available".
+    /// Widget extensions are embedded inside the container app's bundle at
+    /// build time, though, so the key the app was configured with can still be
+    /// read by walking back up to it.
+    private static func resolvedAPIKey() -> String {
+        let configured = CongressService.configuredAPIKey
+        if configured != CongressService.apiKeyPlaceholder { return configured }
+        return containerAppAPIKey() ?? configured
+    }
+
+    private static func containerAppAPIKey() -> String? {
+        let appBundleURL = Bundle.main.bundleURL
+            .deletingLastPathComponent() // PlugIns
+            .deletingLastPathComponent() // <App>.app
+        guard let data = try? Data(contentsOf: appBundleURL.appendingPathComponent("Secrets.plist")),
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let key = plist["CongressGovAPIKey"] as? String,
+              !key.isEmpty, key != CongressService.apiKeyPlaceholder else {
+            return nil
+        }
+        return key
     }
 }
 
 struct TopBillWidgetEntryView: View {
+    @Environment(\.widgetFamily) private var family
     var entry: TopBillProvider.Entry
 
     var body: some View {
@@ -59,26 +86,46 @@ struct TopBillWidgetEntryView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(bill.status.displayLabel(chamber: bill.chamber).uppercased())
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white.opacity(0.8))
                     .lineLimit(1)
                 Text(bill.displayName)
                     .font(.subheadline.weight(.semibold))
-                    .lineLimit(3)
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                Text(bill.summary)
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.85))
+                    .lineLimit(family == .systemSmall ? 2 : 4)
                 Spacer(minLength: 0)
                 if let code = bill.displayCode {
                     Text(code)
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.white.opacity(0.7))
                 }
             }
             .padding()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .containerBackground(.fill.tertiary, for: .widget)
+            .containerBackground(bill.status.widgetBackground, for: .widget)
         } else {
             Text("No bill available")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .containerBackground(.fill.tertiary, for: .widget)
+        }
+    }
+}
+
+/// Solid background color per legislative stage: grey while it's still in
+/// committee, blue once it's cleared a chamber, green once it's law. The
+/// background is the only colored element — text stays white/grey — and the
+/// system substitutes its own background in tinted/clear Home Screen modes,
+/// so this only ever renders in standard full-color mode.
+private extension BillStatus {
+    var widgetBackground: Color {
+        switch tint {
+        case "blue": .blue
+        case "green": .green
+        default: .gray
         }
     }
 }
