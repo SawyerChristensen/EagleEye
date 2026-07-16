@@ -65,8 +65,8 @@
 		086B23FDA18FBE1D53B95AD8 /* TopBillWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopBillWidget.swift; sourceTree = "<group>"; };
 		7B9A2E5BBC7EFE52F4AB0CD4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		FCE025ADD4CD955F782E96B4 /* Bill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EagleEye/Models/Bill.swift; sourceTree = SOURCE_ROOT; };
-		12D838790D522B322BAB1145 /* CongressService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EagleEye/Services/CongressService.swift; sourceTree = SOURCE_ROOT; };
-		32A5F89DAFF48F5A381EE153 /* SenateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EagleEye/Services/SenateService.swift; sourceTree = SOURCE_ROOT; };
+		12D838790D522B322BAB1145 /* CongressService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EagleEye/Services/Representatives/CongressService.swift; sourceTree = SOURCE_ROOT; };
+		32A5F89DAFF48F5A381EE153 /* SenateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EagleEye/Services/Representatives/SenateService.swift; sourceTree = SOURCE_ROOT; };
 		F7D0B29BC7BC65D443ECBD02 /* Representative.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EagleEye/Models/Representative.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 

@@ -113,7 +113,7 @@
 ---
 
 ## Version 1.0
-- [ ] Organize the project's functions and file structure for maximum maintainability and understanding
+- [x] Organize the project's functions and file structure for maximum maintainability and understanding
 - [x] Modify ReadME
 #### Release!
 
