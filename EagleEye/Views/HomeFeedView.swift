@@ -14,9 +14,33 @@ struct HomeFeedView: View {
     var isLoadingMore: Bool = false /// True while an additional page is being fetched below the current bills.
     var onRefresh: (() async -> Void)? = nil /// Pull-to-refresh handler; omitted in previews and when not applicable.
     var onLoadMore: (() async -> Void)? = nil /// Called when the user scrolls near the bottom, to fetch the next page.
+    /// A bill to open immediately, e.g. tapped from the home screen widget.
+    /// Consumed (set back to `nil`) once pushed, so tapping the widget again
+    /// still navigates even if the feed is already showing that bill.
+    @Binding var deepLinkedBill: LegislationRef?
+
+    @State private var path = NavigationPath()
+
+    init(
+        bills: [Bill],
+        isLoading: Bool = false,
+        statusMessage: String? = nil,
+        isLoadingMore: Bool = false,
+        onRefresh: (() async -> Void)? = nil,
+        onLoadMore: (() async -> Void)? = nil,
+        deepLinkedBill: Binding<LegislationRef?> = .constant(nil)
+    ) {
+        self.bills = bills
+        self.isLoading = isLoading
+        self.statusMessage = statusMessage
+        self.isLoadingMore = isLoadingMore
+        self.onRefresh = onRefresh
+        self.onLoadMore = onLoadMore
+        self._deepLinkedBill = deepLinkedBill
+    }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 if bills.isEmpty && isLoading {
                     ProgressView("Loading bills…")
@@ -64,6 +88,14 @@ struct HomeFeedView: View {
             .navigationDestination(for: Bill.self) { bill in
                 BillDetailView(bill: bill)
             }
+            .navigationDestination(for: LegislationRef.self) { reference in
+                MemberBillDetailView(reference: reference)
+            }
+        }
+        .onChange(of: deepLinkedBill, initial: true) { _, newValue in
+            guard let newValue else { return }
+            path.append(newValue)
+            deepLinkedBill = nil
         }
     }
 }

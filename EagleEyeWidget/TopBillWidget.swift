@@ -15,6 +15,24 @@ struct TopBillEntry: TimelineEntry {
     let bill: Bill?
 }
 
+extension Bill {
+    /// The URL tapping this widget opens the app to, resolving straight to
+    /// this bill's detail screen. `nil` when the bill lacks the identifiers
+    /// needed to look it back up (e.g. the widget's placeholder bill).
+    var widgetDeepLinkURL: URL? {
+        guard let congress, let billType, let billNumber else { return nil }
+        var components = URLComponents()
+        components.scheme = "eagleeye"
+        components.host = "bill"
+        components.queryItems = [
+            URLQueryItem(name: "congress", value: String(congress)),
+            URLQueryItem(name: "type", value: billType),
+            URLQueryItem(name: "number", value: billNumber),
+        ]
+        return components.url
+    }
+}
+
 struct TopBillProvider: TimelineProvider {
     fileprivate static let placeholderBill = Bill(
         title: "Clean Water Act — H.R. 1234",
@@ -108,6 +126,7 @@ struct TopBillWidgetEntryView: View {
             .padding(12)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .containerBackground(bill.status.widgetBackground, for: .widget)
+            .widgetURL(bill.widgetDeepLinkURL)
         } else {
             Text("No bill available")
                 .font(.caption)

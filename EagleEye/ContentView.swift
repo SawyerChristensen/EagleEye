@@ -20,8 +20,17 @@ struct ContentView: View {
     @State private var bookmarksStore = BookmarksStore()
     @State private var enactedLawsNotifier = EnactedLawsNotifier()
     @State private var location = LocationManager()
+    /// A bill referenced by the home screen widget's tap URL, forwarded to the
+    /// home feed's navigation stack once the main tabs are showing.
+    @State private var widgetDeepLinkedBill: LegislationRef?
 
     var body: some View {
+        content
+            .onOpenURL(perform: handleWidgetURL)
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch store.loadState {
         case .locating, .denied:
             LocationPromptView(
@@ -64,7 +73,8 @@ struct ContentView: View {
                     statusMessage: billsStore.statusMessage,
                     isLoadingMore: billsStore.isLoadingMore,
                     onRefresh: refreshBills,
-                    onLoadMore: billsStore.loadMore
+                    onLoadMore: billsStore.loadMore,
+                    deepLinkedBill: $widgetDeepLinkedBill
                 )
             }
 
@@ -94,6 +104,21 @@ struct ContentView: View {
         await billsStore.load()
         bookmarksStore.checkForUpdates(in: billsStore.bills)
         enactedLawsNotifier.checkForNewlyEnacted(in: billsStore.bills)
+    }
+
+    /// Handles the `eagleeye://bill?congress=…&type=…&number=…` URL the top
+    /// bill widget attaches to itself, switching to the home feed and pushing
+    /// straight to that bill's detail screen.
+    private func handleWidgetURL(_ url: URL) {
+        guard url.scheme == "eagleeye", url.host == "bill",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return }
+        let query = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).compactMap { item in
+            item.value.map { (item.name, $0) }
+        })
+        guard let congressString = query["congress"], let congress = Int(congressString),
+              let type = query["type"], let number = query["number"] else { return }
+        selection = .home
+        widgetDeepLinkedBill = LegislationRef(congress: congress, type: type, number: number, title: "")
     }
 
     /// Asks for the user's location, then loads their delegation. Stays on the
