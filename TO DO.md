@@ -58,7 +58,7 @@
 - [x] Transition the "Your Representatives" section into having their party color as a shadow rather than an outline. Have a simpler list. Maybe comment out how we build the current view so that we can use it later. Now it should be a list where the most senior senator is one top, followed by the other senator, with the representative on bottom. This should replace the 2-a-row feature we have right now and there should be lines in between each
 - [x] Some of the icons are a little dark. Is there anything similar to the photos app "magic wand" feature that automatically makes photos look good? That should be applied to each photo we get to automatically fix any lighting issues in their official portrait
 - [x] The icons for each representative should be a little bigger, as well as the text. Also, the partisan glow/shadow color around the candidates icons should be centered, and not a little south, which it appears to be
-- [ ] The recent bills section seems finicky. Yesterday there was an enacted bill as the top bill. now the only one shown is from april 17.
+- [x] The recent bills section seems finicky. Yesterday there was an enacted bill as the top bill. now the only one shown is from april 17.
   - [x] Hide bills that start with the text "To designate the" or "To name the"
 - [ ] ADD GOVERNORS TO THE REPRESENTATIVES LIST (if there is a central list of governors to pull from so that we can fill all 50 states) (check if already done) (no big deal if unfeasible, but try)
   - [ ] Instead of a Committees and bills section, just have a "Pills passed into law" section above the contact information. 

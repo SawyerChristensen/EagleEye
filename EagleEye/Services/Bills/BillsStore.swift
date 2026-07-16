@@ -36,6 +36,14 @@ final class BillsStore {
 
     private let service: CongressService
     private let pageSize = 20
+    /// Below this many bills, a fetch is treated as degenerate rather than a
+    /// real refresh. Congress.gov's list endpoint only sorts by `updateDate`,
+    /// and its periodic bulk administrative sweeps can flood the ranked pool
+    /// with ceremonial bills (post-office renamings, etc.); once those are
+    /// filtered out, a swept fetch can collapse to a handful of substantive
+    /// bills even though far more exist. Without this guard, that thin result
+    /// would still overwrite a healthy cache and leave the feed stuck on it.
+    private let minimumViableFeedSize = 5
 
     init(service: CongressService = CongressService()) {
         self.service = service
@@ -61,10 +69,11 @@ final class BillsStore {
 
         do {
             let fetched = try await service.recentBills(limit: pageSize)
-            if fetched.isEmpty {
-                // A successful-but-empty response must not silently overwrite a
-                // good cache. If we have nothing else, fall back to samples;
-                // otherwise keep the cache but say it wasn't refreshed.
+            if fetched.isEmpty || (fetched.count < minimumViableFeedSize && !bills.isEmpty) {
+                // A successful-but-empty (or degenerate/thin) response must not
+                // silently overwrite a good cache. If we have nothing else, fall
+                // back to samples; otherwise keep the cache but say it wasn't
+                // refreshed.
                 if bills.isEmpty {
                     bills = SampleData.bills.rankedByImportance()
                 } else {
