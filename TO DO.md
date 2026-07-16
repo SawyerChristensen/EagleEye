@@ -74,7 +74,7 @@
     - [x] The sheet should have the district name with a copy of the district outline on the right and the representatives profile underneath it. This of course can be expanded as described above
   - [x] Fix all project warnings
   - [x] When the map is opened, the user should be centered on their home district and zoomed in so that district is roughly edge to edge width or heightwise, whichever comes first
-    - [ ] There should be a button that recenters the user on their home district
+    - [x] There should be a button that recenters the user on their home district
   - [ ] Everything outside the US should be tinted a little grey, and geographic information like mountain ranges/basins shouldnt be visible. it clutters the map
   - [ ] Retrieve ALL state representatives and their associated district in the backend of the app. we only display this in the map section
     - [ ] Do the same ^ for governors
