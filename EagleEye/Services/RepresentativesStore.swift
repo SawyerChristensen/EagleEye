@@ -47,8 +47,10 @@ final class RepresentativesStore {
     private let marketService: MarketPerformanceService
 
     /// The last coordinate we successfully resolved a delegation for. Persisted
-    /// so future launches can refresh without prompting for location again.
-    private var cachedCoordinate: CLLocationCoordinate2D?
+    /// so future launches can refresh without prompting for location again, and
+    /// exposed so the map can center on it right away instead of waiting on the
+    /// slower district-boundary lookup.
+    private(set) var cachedCoordinate: CLLocationCoordinate2D?
 
     init(
         service: CongressService = CongressService(),

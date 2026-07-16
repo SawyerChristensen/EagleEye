@@ -70,7 +70,7 @@ struct ContentView: View {
 
             // Right tab: a map of the representatives' offices.
             Tab("Map", systemImage: "map", value: .map) {
-                DistrictMapView(representatives: store.representatives)
+                DistrictMapView(representatives: store.representatives, userCoordinate: store.cachedCoordinate)
             }
         }
         // Make the user's delegation available to bill detail screens so each

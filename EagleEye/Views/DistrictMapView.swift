@@ -10,11 +10,16 @@ import MapKit
 
 struct DistrictMapView: View {
     let representatives: [Representative]
+    /// The user's last resolved coordinate, if any — lets the map center on
+    /// roughly the right place immediately, before the (much slower) district
+    /// boundary parsing and lookup finish.
+    let userCoordinate: CLLocationCoordinate2D?
 
     @State private var position: MapCameraPosition = .automatic
     @State private var stateBoundaries: [MapBoundary] = []
     @State private var districtBoundaries: [MapBoundary] = []
     @State private var selectedDistrict: MapBoundary?
+    @State private var hasSetInitialRegion = false
     @State private var hasCenteredOnUserDistrict = false
     @State private var worldMask: MKPolygon?
 
@@ -81,6 +86,13 @@ struct DistrictMapView: View {
             .navigationTitle("District Map")
             .navigationBarTitleDisplayMode(.inline)
             .task {
+                // Get roughly in the right place right away, using the coordinate
+                // we already have, rather than leaving MapKit's generic default
+                // view up while the district boundaries load and get simplified.
+                if !hasSetInitialRegion, let userCoordinate {
+                    hasSetInitialRegion = true
+                    position = .region(wideRegion(centeredOn: userCoordinate))
+                }
                 guard districtBoundaries.isEmpty, stateBoundaries.isEmpty else { return }
                 async let districts = Task.detached(priority: .userInitiated) { BoundaryLoader.loadDistricts() }.value
                 async let states = Task.detached(priority: .userInitiated) { BoundaryLoader.loadStates() }.value
@@ -183,6 +195,16 @@ struct DistrictMapView: View {
             longitudeDelta: max((maxLon - minLon) * 1.3, 0.3)
         )
         return MKCoordinateRegion(center: center, span: span)
+    }
+
+    /// A coarse, roughly metro-area-wide region around a coordinate — used to
+    /// get the map pointed at the right place immediately, before the precise
+    /// district-fit region (see `region(for:)`) is ready.
+    private func wideRegion(centeredOn coordinate: CLLocationCoordinate2D) -> MKCoordinateRegion {
+        MKCoordinateRegion(
+            center: coordinate,
+            span: MKCoordinateSpan(latitudeDelta: 2, longitudeDelta: 2)
+        )
     }
 
     /// Frames the user's district edge-to-edge the first time both their
@@ -311,5 +333,5 @@ private struct DistrictOutlineShape: Shape {
 }
 
 #Preview {
-    DistrictMapView(representatives: SampleData.representatives)
+    DistrictMapView(representatives: SampleData.representatives, userCoordinate: nil)
 }
