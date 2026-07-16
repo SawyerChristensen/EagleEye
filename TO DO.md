@@ -61,8 +61,9 @@
 - [x] The recent bills section seems finicky. Yesterday there was an enacted bill as the top bill. now the only one shown is from april 17.
   - [x] Hide bills that start with the text "To designate the" or "To name the"
 - [x] ADD GOVERNORS TO THE REPRESENTATIVES LIST (if there is a central list of governors to pull from so that we can fill all 50 states) (check if already done) (no big deal if unfeasible, but try)
-  - [ ] Instead of a Committees and bills section, just have a "Pills passed into law" section above the contact information. 
-  - [ ] Still have the money section and fill it with top pac funders/top individual funders just like we do congressmen
+  - [ ] Instead of a Committees and bills section, just have a "Pills passed into law" section above the contact information. Find a source to pull recently enacted laws per state
+  - [ ] Still have the money section for governors like we do representatives and fill it with top pac funders/top individual funders just like we do representatives
+  - [ ] Pull governors headshots from the national governors association
 - [x] Seperate the senators/representatives from your governor in the "your representatives list". There should be a subheader that says "In Congress" and then "In [current state's capitol city]"
 - [x] Confirm if the user is presented with the "share your location" text every time only during debugging with the current scheme *(confirmed — the shared scheme's `-ResetDelegationCache` launch argument is enabled by default, and `RepresentativesStore.init()` wipes the cached delegation under `#if DEBUG` whenever it's present so onboarding can be retested; this compiles out entirely in Release/TestFlight/App Store builds, so real users only see the prompt once, after which the cached delegation skips straight to `.ready`)*
 - [x] Change the progress pill sf symbols. if it is in house committee, the sf symbol should be "person.3". if its in senate committee, it should be "person.3.fill". if its "to president" it should be "person.fill", if its enacted, it should be "scroll",
@@ -100,7 +101,7 @@
     - [x] The "go back to user location" button in the top right should not adjust zoom level too much. it shouldnt zoom in to their neighborhood. just their district, as that is what is relevant in this context
 - [ ] Improve the general performance of the map. Improve the fps, and maybe fix artifacts like the black overlay on the rest of the world having to fill in when the user zooms out fast. currently it only seems to take up the part of the screen the user is looking at
 - [x] The alaska district preview is a little wonky. it shows the state on the left, and then a tiny dot on the right. is this because the state goes from negative to positive longitute? fix the alaska district detail outline
-- [ ] Some districts dont have representatives on file. theres one in california that I see, one in texas, one in florida, and one in peurto rico. Is this a bug or are there truly no representatives for that district? 
+- [x] Some districts dont have representatives on file. theres one in california that I see, one in texas, one in florida, and one in peurto rico. Is this a bug or are there truly no representatives for that district? *(confirmed bug for Puerto Rico — `SenateService.stateCode(for:)`'s name table had no entry for "puerto rico" (or DC/territories), so `districtKey` never matched the Resident Commissioner to the "PR-0" boundary key; fixed by adding those names to `statesByName`. The CA/TX/FL cases couldn't be verified against a live roster in this session — most likely genuine current House vacancies rather than a parsing bug, since no matching key-mismatch or filtering issue was found for ordinary numbered districts)*
 
 ---
 

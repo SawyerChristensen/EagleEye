@@ -259,6 +259,8 @@ struct SenateService {
         "south dakota": "SD", "tennessee": "TN", "texas": "TX", "utah": "UT",
         "vermont": "VT", "virginia": "VA", "washington": "WA", "west virginia": "WV",
         "wisconsin": "WI", "wyoming": "WY",
+        "american samoa": "AS", "district of columbia": "DC", "guam": "GU",
+        "northern mariana islands": "MP", "puerto rico": "PR", "virgin islands": "VI",
     ]
 }
 
