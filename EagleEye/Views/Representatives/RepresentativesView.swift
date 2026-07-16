@@ -139,14 +139,14 @@ struct RepresentativeRow: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            RepresentativePortrait(representative: representative, size: 72, style: .shadow)
+            RepresentativePortrait(representative: representative, size: 80, style: .shadow)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(representative.name)
-                    .font(.title3.weight(.semibold))
+                    .font(.title2.weight(.semibold))
                     .foregroundStyle(.primary)
                 Text(representative.roleDescription)
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
 
@@ -168,14 +168,14 @@ struct GovernorRow: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            GovernorPortrait(governor: governor, size: 72, style: .shadow)
+            GovernorPortrait(governor: governor, size: 80, style: .shadow)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(governor.name)
-                    .font(.title3.weight(.semibold))
+                    .font(.title2.weight(.semibold))
                     .foregroundStyle(.primary)
                 Text(governor.roleDescription)
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
 
