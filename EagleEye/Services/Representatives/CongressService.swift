@@ -693,7 +693,10 @@ struct CongressService {
         // rank them by importance — legislative progress plus recency of the
         // latest *action* — so the most consequential, recently-acted-on bills
         // win the limited slots regardless of when their record was last touched.
+        // Ceremonial bills (post office renamings, etc.) are dropped before
+        // ranking so they never displace substantive legislation in the feed.
         let ranked = payload.bills
+            .filter { !Self.isCeremonial(title: $0.title) }
             .compactMap { dto in Bill(dto: dto).map { (dto, $0) } }
             .sorted { $0.1.importance() > $1.1.importance() }
             .dropFirst(offset)
@@ -716,6 +719,14 @@ struct CongressService {
 
         print("✅ CongressService Success: Selected and enriched \(bills.count) of \(payload.bills.count) bills by importance.")
         return bills
+    }
+
+    /// Ceremonial bills (renaming a post office, designating a day, etc.) clutter
+    /// the feed without being substantive legislation, so they're excluded outright.
+    private static func isCeremonial(title: String?) -> Bool {
+        guard let title = title?.trimmingCharacters(in: .whitespaces) else { return false }
+        let lowercased = title.lowercased()
+        return lowercased.hasPrefix("to designate the") || lowercased.hasPrefix("to name the")
     }
 
     /// Enriches a list-level bill with its real plain-language summary and
