@@ -25,6 +25,8 @@ struct DistrictMapView: View {
     @State private var worldMask: MKPolygon?
     @State private var nationalHouseDirectory = NationalHouseDirectory()
 
+    @Environment(\.colorScheme) private var colorScheme
+
     /// Members to show as pins. Senators are excluded for now — they represent
     /// a whole state rather than a single district, so they have no "middle of
     /// the district" point to pin at.
@@ -184,9 +186,18 @@ struct DistrictMapView: View {
 
     /// The fill color for a district's polygon: its representative's party
     /// color, or clear if no member currently matches it (e.g. a non-voting
-    /// delegate's district).
+    /// delegate's district). Blue and red run slightly brighter in dark mode,
+    /// where the stock system colors read too dark against the near-black map.
     private func fillColor(for boundary: MapBoundary) -> Color {
-        partyByDistrict[districtKey(state: boundary.state, district: boundary.district)]?.color ?? .clear
+        guard let party = partyByDistrict[districtKey(state: boundary.state, district: boundary.district)] else {
+            return .clear
+        }
+        guard colorScheme == .dark else { return party.color }
+        switch party {
+        case .democrat: return Color(red: 0.40, green: 0.66, blue: 1.0)
+        case .republican: return Color(red: 1.0, green: 0.40, blue: 0.38)
+        case .independent: return party.color
+        }
     }
 
     /// The boundary matching a representative's state and district, if its
