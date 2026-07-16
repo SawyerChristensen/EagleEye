@@ -314,17 +314,17 @@ private struct BillProgressStrip: View {
                     if failedChamber != nil {
                         // Dead end: the stage it cleared, then the failure. No
                         // next stage — the bill advances no further.
-                        StepPill(label: status.displayLabel(chamber: chamber), kind: .past)
+                        StepPill(label: status.displayLabel(chamber: chamber), symbolName: status.symbolName(chamber: chamber), kind: .past)
                         StatusBadge(status: status, chamber: chamber, failedChamber: failedChamber)
                             .alignmentGuide(.progressCurrent) { $0[HorizontalAlignment.center] }
                     } else {
                         if let previous = status.previousStage(chamber: chamber) {
-                            StepPill(label: previous.displayLabel(chamber: chamber), kind: .past)
+                            StepPill(label: previous.displayLabel(chamber: chamber), symbolName: previous.symbolName(chamber: chamber), kind: .past)
                         }
                         StatusBadge(status: status, chamber: chamber)
                             .alignmentGuide(.progressCurrent) { $0[HorizontalAlignment.center] }
                         if let next = status.nextStage(chamber: chamber) {
-                            StepPill(label: next.displayLabel(chamber: chamber), kind: .future)
+                            StepPill(label: next.displayLabel(chamber: chamber), symbolName: next.symbolName(chamber: chamber), kind: .future)
                         }
                     }
                 }
@@ -350,19 +350,23 @@ private struct BillProgressStrip: View {
 private struct StepPill: View {
     enum Kind { case past, future }
     let label: String
+    let symbolName: String
     let kind: Kind
 
     var body: some View {
-        Text(label)
-            .font(.caption.weight(.medium))
-            .lineLimit(1)
-            .foregroundStyle(kind == .past ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(
-                kind == .past ? Color(.systemGray5) : Color(.systemGray6),
-                in: .capsule
-            )
+        HStack(spacing: 4) {
+            Image(systemName: symbolName)
+            Text(label)
+        }
+        .font(.caption.weight(.medium))
+        .lineLimit(1)
+        .foregroundStyle(kind == .past ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(
+            kind == .past ? Color(.systemGray5) : Color(.systemGray6),
+            in: .capsule
+        )
     }
 }
 
