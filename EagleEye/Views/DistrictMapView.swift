@@ -16,6 +16,7 @@ struct DistrictMapView: View {
     @State private var districtBoundaries: [MapBoundary] = []
     @State private var selectedDistrict: MapBoundary?
     @State private var hasCenteredOnUserDistrict = false
+    @State private var worldMask: MKPolygon?
 
     /// Members to show as pins. Senators are excluded for now — they represent
     /// a whole state rather than a single district, so they have no "middle of
@@ -37,6 +38,11 @@ struct DistrictMapView: View {
         NavigationStack {
             MapReader { proxy in
                 Map(position: $position) {
+                    if let worldMask {
+                        MapPolygon(worldMask)
+                            .foregroundStyle(.gray.opacity(0.35))
+                    }
+
                     ForEach(districtBoundaries) { boundary in
                         ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
                             MapPolygon(coordinates: closed(ring))
@@ -62,7 +68,7 @@ struct DistrictMapView: View {
 
                     UserAnnotation()
                 }
-                .mapStyle(.standard(pointsOfInterest: .excludingAll, showsTraffic: false))
+                .mapStyle(.standard(emphasis: .muted, pointsOfInterest: .excludingAll, showsTraffic: false))
                 .mapControls {
                     recenterButton
                     MapCompass()
@@ -80,6 +86,7 @@ struct DistrictMapView: View {
                 async let states = Task.detached(priority: .userInitiated) { BoundaryLoader.loadStates() }.value
                 districtBoundaries = await districts
                 stateBoundaries = await states
+                worldMask = Self.buildWorldMask(from: stateBoundaries)
                 centerOnUserDistrictIfNeeded()
             }
             .onChange(of: representatives) { centerOnUserDistrictIfNeeded() }
@@ -93,6 +100,23 @@ struct DistrictMapView: View {
                 .presentationDragIndicator(.visible)
             }
         }
+    }
+
+    /// A world-covering polygon with every state/territory boundary punched
+    /// out as a hole, so filling it grey tints everything outside the US
+    /// without touching the country's own territory.
+    private static func buildWorldMask(from states: [MapBoundary]) -> MKPolygon? {
+        guard !states.isEmpty else { return nil }
+        let world = [
+            CLLocationCoordinate2D(latitude: 85, longitude: -180),
+            CLLocationCoordinate2D(latitude: 85, longitude: 180),
+            CLLocationCoordinate2D(latitude: -85, longitude: 180),
+            CLLocationCoordinate2D(latitude: -85, longitude: -180),
+        ]
+        let holes = states.flatMap { $0.rings }.map { ring in
+            MKPolygon(coordinates: ring, count: ring.count)
+        }
+        return MKPolygon(coordinates: world, count: world.count, interiorPolygons: holes)
     }
 
     /// Closes a boundary ring so the outline draws back to its starting point.
