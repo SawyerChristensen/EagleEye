@@ -9,6 +9,8 @@ import SwiftUI
 
 struct RepresentativesView: View {
     let representatives: [Representative]
+    /// The user's state governor, shown at the bottom of the delegation list.
+    var governor: Governor?
     /// True while the delegation is being resolved and there's nothing to show
     /// yet, so the grid shows a spinner instead of a blank screen.
     var isLoading: Bool = false
@@ -41,9 +43,16 @@ struct RepresentativesView: View {
                                 }
                                 .buttonStyle(.plain)
 
-                                if index < orderedRepresentatives.count - 1 {
+                                if index < orderedRepresentatives.count - 1 || governor != nil {
                                     Divider()
                                 }
+                            }
+
+                            if let governor {
+                                NavigationLink(value: governor) {
+                                    GovernorRow(governor: governor)
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                         .padding(.horizontal, 20)
@@ -54,6 +63,9 @@ struct RepresentativesView: View {
             .navigationTitle("Your Representatives")
             .navigationDestination(for: Representative.self) { rep in
                 RepresentativeDetailView(representative: rep)
+            }
+            .navigationDestination(for: Governor.self) { governor in
+                GovernorDetailView(governor: governor)
             }
             .navigationDestination(for: LegislationRef.self) { bill in
                 MemberBillDetailView(reference: bill)
@@ -113,6 +125,35 @@ struct RepresentativeRow: View {
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(.primary)
                 Text(representative.roleDescription)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
+    }
+}
+
+/// A single tappable governor, styled the same as `RepresentativeRow` so the
+/// governor reads as part of the same list.
+struct GovernorRow: View {
+    let governor: Governor
+
+    var body: some View {
+        HStack(spacing: 16) {
+            GovernorPortrait(governor: governor, size: 72, style: .shadow)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(governor.name)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(governor.roleDescription)
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -219,6 +260,52 @@ struct RepresentativePortrait: View {
                 .font(.system(size: size * 0.34, weight: .semibold))
                 .foregroundStyle(.white)
         }
+    }
+}
+
+/// A governor's initials avatar with a party-color glow. There's no portrait
+/// source for governors (unlike `Representative`'s Congress.gov photos), so
+/// this is always the colored-initials placeholder.
+struct GovernorPortrait: View {
+    let governor: Governor
+    let size: CGFloat
+    var style: PortraitAccentStyle = .outline
+
+    private var partyColor: Color {
+        switch governor.party {
+        case .democrat: .blue
+        case .republican: .red
+        case .independent: .purple
+        }
+    }
+
+    private var initials: String {
+        governor.name
+            .split(separator: " ")
+            .prefix(2)
+            .compactMap { $0.first }
+            .map(String.init)
+            .joined()
+    }
+
+    var body: some View {
+        ZStack {
+            Rectangle().fill(partyColor.gradient)
+            Text(initials)
+                .font(.system(size: size * 0.34, weight: .semibold))
+                .foregroundStyle(.white)
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .overlay {
+            if style == .outline {
+                Circle().strokeBorder(partyColor.opacity(0.6), lineWidth: 3)
+            }
+        }
+        .shadow(
+            color: style == .shadow ? partyColor.opacity(0.7) : .clear,
+            radius: style == .shadow ? size * 0.12 : 0
+        )
     }
 }
 

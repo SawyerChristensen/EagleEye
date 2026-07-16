@@ -31,11 +31,17 @@ struct MapBoundary: Identifiable {
     /// A human-readable label for this boundary, e.g. "California's 12th
     /// District" or "Wyoming's At-Large District".
     var displayName: String {
-        let stateName = Self.stateNames[state] ?? state
+        let stateName = Self.stateName(for: state)
         guard let district, district != 0 else {
             return "\(stateName)'s At-Large District"
         }
         return "\(stateName)'s \(Self.ordinal(district)) District"
+    }
+
+    /// The full state/territory name for a two-letter postal code, e.g.
+    /// "CA" → "California". Falls back to the code itself if unrecognized.
+    static func stateName(for code: String) -> String {
+        stateNames[code] ?? code
     }
 
     /// Full state/territory names keyed by postal code, for display purposes.

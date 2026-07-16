@@ -23,4 +23,10 @@ struct Governor: Identifiable, Codable, Hashable {
         self.party = party
         self.state = state
     }
+
+    /// The state's full name, e.g. "California" for "CA".
+    var stateName: String { MapBoundary.stateName(for: state) }
+
+    /// e.g. "Governor of California".
+    var roleDescription: String { "Governor of \(stateName)" }
 }

@@ -61,6 +61,7 @@ struct ContentView: View {
             Tab("Your Reps", systemImage: "person.2", value: .representatives) {
                 RepresentativesView(
                     representatives: store.representatives,
+                    governor: store.governor,
                     isLoading: store.loadState == .loading
                 )
             }

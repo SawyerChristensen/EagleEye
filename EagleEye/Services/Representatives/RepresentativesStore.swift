@@ -34,6 +34,9 @@ final class RepresentativesStore {
     }
 
     private(set) var representatives: [Representative] = []
+    /// The user's state governor, resolved from `GovernorDirectory` alongside
+    /// the congressional delegation. `nil` until a location has been resolved.
+    private(set) var governor: Governor?
     private(set) var loadState: LoadState = .locating
     /// A user-facing note when live data could not be loaded (e.g. no API key).
     private(set) var statusMessage: String?
@@ -83,6 +86,7 @@ final class RepresentativesStore {
         if let cache = Self.loadCache(), !cache.representatives.isEmpty {
             representatives = cache.representatives
             cachedCoordinate = cache.coordinate
+            governor = cache.stateCode.flatMap(GovernorDirectory.governor(forState:))
             // Seed the on-demand profile cache from the persisted delegation so
             // opening one of these members from the map reuses it immediately,
             // even before the first background refresh.
@@ -129,8 +133,9 @@ final class RepresentativesStore {
                     disclosureService: disclosureService,
                     marketService: marketService
                 )
+                governor = GovernorDirectory.governor(forState: stateCode)
                 cachedCoordinate = coordinate
-                Self.saveCache(coordinate: coordinate, representatives: representatives)
+                Self.saveCache(coordinate: coordinate, stateCode: stateCode, representatives: representatives)
                 // Share the freshly enriched delegation with the on-demand
                 // profile cache so opening one of these members from the map
                 // reuses this data instead of fetching it all over again.
@@ -385,6 +390,10 @@ final class RepresentativesStore {
         let latitude: Double
         let longitude: Double
         let representatives: [Representative]
+        /// The resolved state postal code, used to look up the governor from
+        /// `GovernorDirectory` on load. Optional so caches saved before this
+        /// field existed still decode.
+        let stateCode: String?
 
         var coordinate: CLLocationCoordinate2D {
             CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -395,11 +404,14 @@ final class RepresentativesStore {
 
     /// Persists a freshly resolved delegation so the next launch can skip the
     /// location prompt.
-    private static func saveCache(coordinate: CLLocationCoordinate2D, representatives: [Representative]) {
+    private static func saveCache(
+        coordinate: CLLocationCoordinate2D, stateCode: String, representatives: [Representative]
+    ) {
         let cache = DelegationCache(
             latitude: coordinate.latitude,
             longitude: coordinate.longitude,
-            representatives: representatives
+            representatives: representatives,
+            stateCode: stateCode
         )
         if let data = try? JSONEncoder().encode(cache) {
             UserDefaults.standard.set(data, forKey: cacheKey)
