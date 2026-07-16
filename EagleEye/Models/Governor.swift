@@ -27,6 +27,9 @@ struct Governor: Identifiable, Codable, Hashable {
     /// The state's full name, e.g. "California" for "CA".
     var stateName: String { MapBoundary.stateName(for: state) }
 
+    /// The state's capital city, e.g. "Sacramento" for "CA".
+    var capitalCity: String { MapBoundary.capitalCity(for: state) }
+
     /// e.g. "Governor of California".
     var roleDescription: String { "Governor of \(stateName)" }
 }

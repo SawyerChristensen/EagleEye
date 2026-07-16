@@ -36,19 +36,26 @@ struct RepresentativesView: View {
                     ProgressView("Finding your representatives…")
                 } else {
                     ScrollView {
-                        VStack(spacing: 0) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            if !orderedRepresentatives.isEmpty {
+                                SectionSubheader(title: "In Congress")
+                            }
+
                             ForEach(orderedRepresentatives.indices, id: \.self) { index in
                                 NavigationLink(value: orderedRepresentatives[index]) {
                                     RepresentativeRow(representative: orderedRepresentatives[index])
                                 }
                                 .buttonStyle(.plain)
 
-                                if index < orderedRepresentatives.count - 1 || governor != nil {
+                                if index < orderedRepresentatives.count - 1 {
                                     Divider()
                                 }
                             }
 
                             if let governor {
+                                SectionSubheader(title: "In \(governor.capitalCity)")
+                                    .padding(.top, 8)
+
                                 NavigationLink(value: governor) {
                                     GovernorRow(governor: governor)
                                 }
@@ -108,6 +115,20 @@ struct RepresentativesView: View {
     //         Array(reps[$0..<min($0 + size, reps.count)])
     //     }
     // }
+}
+
+/// A small uppercase label separating the congressional delegation from the
+/// governor in the "Your Representatives" list, e.g. "In Congress" or
+/// "In Sacramento".
+struct SectionSubheader: View {
+    let title: String
+
+    var body: some View {
+        Text(title.uppercased())
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.bottom, 6)
+    }
 }
 
 /// A single tappable representative in the list: a portrait with a party-color
