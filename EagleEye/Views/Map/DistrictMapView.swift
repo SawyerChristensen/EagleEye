@@ -368,9 +368,23 @@ private struct DistrictOutlineShape: Shape {
         let points = rings.flatMap { $0 }
         guard let minLat = points.map(\.latitude).min(),
               let maxLat = points.map(\.latitude).max(),
-              let minLon = points.map(\.longitude).min(),
-              let maxLon = points.map(\.longitude).max()
+              let rawMinLon = points.map(\.longitude).min(),
+              let rawMaxLon = points.map(\.longitude).max()
         else { return path }
+
+        // A boundary that crosses the antimeridian (e.g. Alaska, whose
+        // Aleutian Islands run past 180° into positive longitude) has points
+        // on both sides of the ±180 seam. Taking min/max of the raw
+        // longitudes then spans nearly the whole globe, squashing the real
+        // shape into a sliver on one side and a stray dot on the other.
+        // Unwrap by shifting negative longitudes up by 360° so the ring reads
+        // as one contiguous span instead of two far-apart clusters.
+        let crossesAntimeridian = rawMaxLon - rawMinLon > 180
+        func unwrap(_ longitude: Double) -> Double {
+            crossesAntimeridian && longitude < 0 ? longitude + 360 : longitude
+        }
+        let minLon = crossesAntimeridian ? points.map { unwrap($0.longitude) }.min()! : rawMinLon
+        let maxLon = crossesAntimeridian ? points.map { unwrap($0.longitude) }.max()! : rawMaxLon
 
         // A degree of longitude spans less ground than a degree of latitude by
         // a factor of cos(latitude). Without this correction the outline is
@@ -386,7 +400,7 @@ private struct DistrictOutlineShape: Shape {
 
         func point(_ coordinate: CLLocationCoordinate2D) -> CGPoint {
             CGPoint(
-                x: originX + (coordinate.longitude - minLon) * lonScale * scale,
+                x: originX + (unwrap(coordinate.longitude) - minLon) * lonScale * scale,
                 y: originY + (maxLat - coordinate.latitude) * scale
             )
         }

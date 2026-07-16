@@ -99,7 +99,7 @@
       - [ ] The state level information view should have information about the state, similar to what the districts have. total population, top sectors/industry, top cities by population, top universities, etc. this view should should show the governor on top, the two senators, and list of all house representatives in the state under the senators
     - [x] The "go back to user location" button in the top right should not adjust zoom level too much. it shouldnt zoom in to their neighborhood. just their district, as that is what is relevant in this context
 - [ ] Improve the general performance of the map. Improve the fps, and maybe fix artifacts like the black overlay on the rest of the world having to fill in when the user zooms out fast. currently it only seems to take up the part of the screen the user is looking at
-- [ ] The alaska district preview is a little wonky. it shows the state on the left, and then a tiny dot on the right. is this because the state goes from negative to positive longitute? fix the alaska district detail outline
+- [x] The alaska district preview is a little wonky. it shows the state on the left, and then a tiny dot on the right. is this because the state goes from negative to positive longitute? fix the alaska district detail outline
 - [ ] Some districts dont have representatives on file. theres one in california that I see, one in texas, one in florida, and one in peurto rico. Is this a bug or are there truly no representatives for that district? 
 
 ---
