@@ -59,6 +59,7 @@ struct DistrictMapView: View {
 
                 UserAnnotation()
             }
+            .mapStyle(.standard(pointsOfInterest: .excludingAll, showsTraffic: false))
             .mapControls {
                 MapUserLocationButton()
                 MapCompass()
