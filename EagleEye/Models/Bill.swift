@@ -47,6 +47,19 @@ enum BillStatus: String, Codable, CaseIterable {
         case .passedHouse, .passedSenate, .toPresident, .enacted: rawValue
         }
     }
+
+    /// The SF Symbol shown on the status pill. Committee stages read as people
+    /// (a group in committee, filled once it's the Senate's), "To President"
+    /// as the person who acts on it next, and "Enacted" as the signed law
+    /// itself; the other stages fall back to the originating chamber's icon.
+    func symbolName(chamber: Chamber) -> String {
+        switch self {
+        case .introduced, .passedHouse, .passedSenate: chamber.symbolName
+        case .inCommittee: chamber == .house ? "person.3" : "person.3.fill"
+        case .toPresident: "person.fill"
+        case .enacted: "scroll"
+        }
+    }
 }
 
 /// The 32 policy areas the Library of Congress assigns to legislation. A bill

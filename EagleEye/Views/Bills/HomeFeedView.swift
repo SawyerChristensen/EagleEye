@@ -232,7 +232,7 @@ struct StatusBadge: View {
     }
 
     private var symbolName: String {
-        failedChamber == nil ? chamber.symbolName : "xmark.circle"
+        failedChamber == nil ? status.symbolName(chamber: chamber) : "xmark.circle"
     }
 
     private var foregroundColor: Color {
