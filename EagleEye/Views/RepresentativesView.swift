@@ -106,14 +106,14 @@ struct RepresentativeRow: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            RepresentativePortrait(representative: representative, size: 60, style: .shadow)
+            RepresentativePortrait(representative: representative, size: 72, style: .shadow)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(representative.name)
-                    .font(.headline)
+                    .font(.title3.weight(.semibold))
                     .foregroundStyle(.primary)
                 Text(representative.roleDescription)
-                    .font(.subheadline)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
             }
 
@@ -208,8 +208,7 @@ struct RepresentativePortrait: View {
         }
         .shadow(
             color: style == .shadow ? partyColor.opacity(0.7) : .clear,
-            radius: style == .shadow ? size * 0.12 : 0,
-            y: style == .shadow ? 2 : 0
+            radius: style == .shadow ? size * 0.12 : 0
         )
     }
 
