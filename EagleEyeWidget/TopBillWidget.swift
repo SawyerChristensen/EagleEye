@@ -83,19 +83,21 @@ struct TopBillWidgetEntryView: View {
 
     var body: some View {
         if let bill = entry.bill {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(bill.status.displayLabel(chamber: bill.chamber).uppercased())
-                    .font(.caption2.weight(.semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.8))
                     .lineLimit(1)
                 Text(bill.displayName)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.headline.weight(.semibold))
                     .foregroundStyle(.white)
-                    .lineLimit(2)
+                    .lineLimit(family == .systemSmall ? 3 : 4)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(bill.summary)
-                    .font(.caption2)
+                    .font(.footnote)
                     .foregroundStyle(.white.opacity(0.85))
-                    .lineLimit(family == .systemSmall ? 2 : 4)
+                    .lineLimit(family == .systemSmall ? 4 : 7)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
                 if let code = bill.displayCode {
                     Text(code)
@@ -103,7 +105,7 @@ struct TopBillWidgetEntryView: View {
                         .foregroundStyle(.white.opacity(0.7))
                 }
             }
-            .padding()
+            .padding(12)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .containerBackground(bill.status.widgetBackground, for: .widget)
         } else {

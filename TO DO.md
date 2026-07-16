@@ -104,7 +104,7 @@
 
 - [x] Add home screen widgets that show what would be shown as the top bill in the recent bills feed
   - [x] Currently the home screen widgets are broken. While I can add one to my home screen, it says "No bill available" and doesnt display anything. It should display the bill title as shown in in app, the description. The background of the widget should match the color of the status of the bill. In committee, grey. Passed house or senate, blue, and enacted, green. Instead of a progress pill, it should just have the status text on the top of the widget as a header above the title. This color should of course be deactived if the user has a clear or tinted homescreen. The background should be the only "colored" thing. The text should be either white or some sort of greys
-  - [ ] Expand the text vertically and horizontally. the text should take up more space in the widget
+  - [x] Expand the text vertically and horizontally. the text should take up more space in the widget
   - [ ] When tapping on the widget, the user should automatically be sent to the bill that was displayed detail view, with a back button sending them to recent bills.
 - [x] Add system notifications for new bills being passed
   - [x] Recently enacted laws should be a push notification
