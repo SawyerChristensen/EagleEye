@@ -75,7 +75,7 @@
   - [x] Fix all project warnings
   - [x] When the map is opened, the user should be centered on their home district and zoomed in so that district is roughly edge to edge width or heightwise, whichever comes first
     - [x] ^ this takes awhile to center. is this because everything is being retrieved, and then the users location is found? what if we center on the user at a certain wide zoom, and then adjust later?
-    - [ ] There should be a button that recenters the user on their home district. I CANNOT SEE THIS BUTTON. You have previously commit twice saying that there is a button. I cannot see any recentering button in the actual map
+    - [x] There should be a button that recenters the user on their home district. I CANNOT SEE THIS BUTTON. You have previously commit twice saying that there is a button. I cannot see any recentering button in the actual map
   - [x] Everything outside the US should be tinted a little grey, and geographic information like mountain ranges/basins shouldnt be visible. it clutters the map
   - [ ] Retrieve ALL state representatives and their associated district in the backend of the app. we only display this in the map section
     - [ ] Do the same ^ for governors

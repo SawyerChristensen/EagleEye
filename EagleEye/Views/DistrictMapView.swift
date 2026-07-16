@@ -75,12 +75,19 @@ struct DistrictMapView: View {
                 }
                 .mapStyle(.standard(emphasis: .muted, pointsOfInterest: .excludingAll, showsTraffic: false))
                 .mapControls {
-                    recenterButton
                     MapCompass()
                 }
                 .onTapGesture { screenPoint in
                     guard let coordinate = proxy.convert(screenPoint, from: .local) else { return }
                     selectedDistrict = districtBoundaries.first { $0.contains(coordinate) }
+                }
+                // `.mapControls` is built for MapKit's own control types (MapCompass,
+                // MapUserLocationButton, etc.) — a plain custom Button placed inside it
+                // is unreliable and can silently fail to render. An explicit overlay
+                // guarantees this button actually shows up.
+                .overlay(alignment: .bottomTrailing) {
+                    recenterButton
+                        .padding()
                 }
             }
             .navigationTitle("District Map")
