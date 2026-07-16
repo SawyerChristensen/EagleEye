@@ -78,7 +78,17 @@ private struct BoundaryCollectionDTO: Decodable {
 
 /// Loads bundled boundary geometry. Parsing ~180k coordinate pairs takes a
 /// noticeable moment, so callers should run this off the main thread.
+///
+/// Rendering that many vertices as MapKit overlays nationwide at once is
+/// what drove the map's memory footprint over the OS limit (EXC_RESOURCE
+/// high-watermark crash), so every ring is simplified with the
+/// Douglas-Peucker algorithm on load. A tolerance of ~110m is imperceptible
+/// at the zoom levels this map is used at, but cuts the vertex count
+/// dramatically since the bundled Census cartographic files are far denser
+/// than the app needs.
 enum BoundaryLoader {
+    private static let simplificationTolerance = 0.001 // degrees, ≈110m
+
     static func loadStates() -> [MapBoundary] {
         load(resource: "StateBoundaries")
     }
@@ -99,9 +109,67 @@ enum BoundaryLoader {
                 state: feature.state,
                 district: feature.district,
                 rings: feature.rings.map { ring in
-                    ring.map { CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0]) }
+                    simplify(
+                        ring.map { CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0]) },
+                        tolerance: simplificationTolerance
+                    )
                 }
             )
         }
+    }
+
+    /// Reduces a ring's vertex count with the Douglas-Peucker algorithm,
+    /// dropping points that fall within `tolerance` (in degrees) of the
+    /// line between their neighbors while preserving the ring's shape.
+    private static func simplify(_ points: [CLLocationCoordinate2D], tolerance: Double) -> [CLLocationCoordinate2D] {
+        guard points.count > 2 else { return points }
+        var keep = [Bool](repeating: false, count: points.count)
+        keep[0] = true
+        keep[points.count - 1] = true
+        simplifySegment(points, 0, points.count - 1, tolerance, &keep)
+        return points.indices.compactMap { keep[$0] ? points[$0] : nil }
+    }
+
+    private static func simplifySegment(
+        _ points: [CLLocationCoordinate2D],
+        _ start: Int,
+        _ end: Int,
+        _ tolerance: Double,
+        _ keep: inout [Bool]
+    ) {
+        guard end > start + 1 else { return }
+        var maxDistance = 0.0
+        var farthestIndex = start
+        for i in (start + 1)..<end {
+            let distance = perpendicularDistance(points[i], points[start], points[end])
+            if distance > maxDistance {
+                maxDistance = distance
+                farthestIndex = i
+            }
+        }
+        if maxDistance > tolerance {
+            keep[farthestIndex] = true
+            simplifySegment(points, start, farthestIndex, tolerance, &keep)
+            simplifySegment(points, farthestIndex, end, tolerance, &keep)
+        }
+    }
+
+    /// Distance from `point` to the line through `lineStart`/`lineEnd`, in
+    /// the same (degree) units as the coordinates.
+    private static func perpendicularDistance(
+        _ point: CLLocationCoordinate2D,
+        _ lineStart: CLLocationCoordinate2D,
+        _ lineEnd: CLLocationCoordinate2D
+    ) -> Double {
+        let dx = lineEnd.longitude - lineStart.longitude
+        let dy = lineEnd.latitude - lineStart.latitude
+        let lengthSquared = dx * dx + dy * dy
+        guard lengthSquared > .ulpOfOne else {
+            let ddx = point.longitude - lineStart.longitude
+            let ddy = point.latitude - lineStart.latitude
+            return (ddx * ddx + ddy * ddy).squareRoot()
+        }
+        let cross = dx * (lineStart.latitude - point.latitude) - dy * (lineStart.longitude - point.longitude)
+        return abs(cross) / lengthSquared.squareRoot()
     }
 }
