@@ -83,9 +83,13 @@ struct DistrictMapView: View {
     }
 
     /// A lookup key combining state and district number; at-large districts
-    /// use `0`, matching the bundled Census boundary data.
+    /// use `0`, matching the bundled Census boundary data. Congress.gov gives
+    /// representatives' state as a full name (e.g. "California") while the
+    /// bundled boundary data keys districts by postal code (e.g. "CA"), so
+    /// both sides are normalized to the postal code before comparing.
     private func districtKey(state: String, district: Int?) -> String {
-        "\(state)-\(district ?? 0)"
+        let code = SenateService.stateCode(for: state) ?? state
+        return "\(code)-\(district ?? 0)"
     }
 
     /// The fill color for a district's polygon: its representative's party

@@ -68,7 +68,7 @@
   - [x] Find borders of all congressional districts give them small borders. Find borders for states and give them thicker borders
   - [x] The current map is too detailed. Switch map modes so that it doesnt have all of the geographic features this one does. 
   - [x] App crashed with: "Thread 45: EXC_RESOURCE (RESOURCE_TYPE_MEMORY: high watermark memory limit exceeded) (limit=3376 MB)"
-  - [ ] Fill the congressional districts with party color, with each representative in the middle of the district or the district capitol (if there is one) (THIS WAS PREVIOUSLY MARKED AS DONE. IT DOES NOT WORK. THE DISTRICTS DO NOT FILL WITH PARTY COLOR
+  - [x] Fill the congressional districts with party color, with each representative in the middle of the district or the district capitol (if there is one) (THIS WAS PREVIOUSLY MARKED AS DONE. IT DOES NOT WORK. THE DISTRICTS DO NOT FILL WITH PARTY COLOR
     - [ ] If a distrct is tapped on, the name of the district should pop up on a sheet that only fills the bottom half of the screen. the sheet should be draggable if the user wants to drag it up so that it fills all of the screen (it can still be dragged down and dismissed)
     - [ ] The sheet should have the district name with a copy of the district outline on the right and the representatives profile underneath it. This of course can be expanded as described above
   - [ ] Fix all project warnings
