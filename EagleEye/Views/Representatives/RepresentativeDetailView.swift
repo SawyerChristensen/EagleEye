@@ -13,6 +13,27 @@ import SwiftUI
 struct RepresentativeDetailView: View {
     let representative: Representative
 
+    /// A more complete copy of `representative`, fetched on demand when the
+    /// value we were handed is sparse — see `enrichIfNeeded()`. The district
+    /// map opens profiles from the nationwide roster, which carries only the
+    /// basics (name, party, district) and none of the committee or bill data,
+    /// so those are filled in here rather than up front. Nil until (and
+    /// unless) that fetch runs.
+    @State private var enriched: Representative?
+
+    /// True while the on-demand enrichment fetch is in flight, so the About and
+    /// Votes sections can show a spinner instead of an empty note before the
+    /// committee, bill, and vote data has arrived.
+    @State private var isEnriching = false
+
+    /// The profile actually displayed: the enriched copy once it has loaded,
+    /// otherwise the value passed in.
+    private var member: Representative { enriched ?? representative }
+
+    private let congressService = CongressService()
+    private let committeeService = CommitteeService()
+    private let financeService = OpenFECService()
+
     /// The three top-level sections of a member's profile.
     private enum ProfileTab: String, CaseIterable, Identifiable {
         case about = "About"
@@ -34,7 +55,7 @@ struct RepresentativeDetailView: View {
     @State private var selectedTab: ProfileTab = .about
 
     private var partyColor: Color {
-        switch representative.party {
+        switch member.party {
         case .democrat: .blue
         case .republican: .red
         case .independent: .purple
@@ -61,7 +82,10 @@ struct RepresentativeDetailView: View {
                 case .votes:
                     votingHistorySection
                 case .money:
-                    marketMeterSection
+                    // "Beats the Market" is temporarily hidden — to be
+                    // re-enabled in a later update. Its declaration and
+                    // supporting types are kept below.
+                    // marketMeterSection
                     tradingSection
                     pacFundersSection
                     individualFundersSection
@@ -69,23 +93,89 @@ struct RepresentativeDetailView: View {
             }
             .padding()
         }
-        .navigationTitle(representative.name)
+        .navigationTitle(member.name)
         .navigationBarTitleDisplayMode(.inline)
+        .task { await enrichIfNeeded() }
+    }
+
+    /// Fills in committee assignments, sponsored/cosponsored bills (and recent
+    /// votes), and top PAC/individual funders when the profile was opened with
+    /// a sparse member — as it is from the district map, which lists the
+    /// nationwide roster. When the profile already carries this data (e.g.
+    /// opened from the Representatives tab, where the store pre-enriches the
+    /// delegation) or the member has no Bioguide ID to look up (sample data),
+    /// this is a no-op. Funders are skipped unless an OpenFEC key is configured.
+    private func enrichIfNeeded() async {
+        guard enriched == nil,
+              let bioguideID = representative.bioguideID,
+              representative.committees.isEmpty,
+              representative.sponsoredBills.isEmpty,
+              representative.cosponsoredBills.isEmpty
+        else { return }
+
+        // Reuse a profile enriched earlier this session (e.g. reopening the
+        // same member from the map) instead of fetching it all over again.
+        if let cached = RepresentativeProfileCache.profile(forBioguideID: bioguideID) {
+            enriched = cached
+            return
+        }
+
+        isEnriching = true
+        defer { isEnriching = false }
+
+        // Kick off the profile, committee, and FEC-crosswalk fetches together
+        // so they overlap; the per-member funder lookups depend on the
+        // crosswalk and run once it resolves.
+        async let profile = congressService.enrichedProfile(for: representative)
+        async let assignments = committeeService.committeeAssignments()
+        async let candidates = financeService.isConfigured
+            ? financeService.candidateIDsByBioguide()
+            : [:]
+
+        var result = await profile
+        if let id = result.bioguideID {
+            if let committees = await assignments[id], !committees.isEmpty {
+                result = result.withCommittees(committees)
+            }
+            if let candidateIDs = await candidates[id], !candidateIDs.isEmpty {
+                async let pac = financeService.topFunders(candidateIDs: candidateIDs, office: result.office)
+                async let individual = financeService.topIndividualFunders(candidateIDs: candidateIDs, office: result.office)
+                let pacFunders = await pac
+                let individualFunders = await individual
+                if !pacFunders.isEmpty || !individualFunders.isEmpty {
+                    result = result.withFunders(pac: pacFunders, individual: individualFunders)
+                }
+            }
+        }
+        RepresentativeProfileCache.store(result)
+        enriched = result
+    }
+
+    /// A small inline spinner shown in a section whose data is still being
+    /// fetched on demand, standing in for the "nothing on record" note until
+    /// the enrichment fetch finishes.
+    private var loadingNote: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+            Text("Loading…")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
     }
 
     // MARK: - Header
 
     private var header: some View {
         VStack(spacing: 12) {
-            RepresentativePortrait(representative: representative, size: 140)
+            RepresentativePortrait(representative: member, size: 140)
 
             VStack(spacing: 4) {
-                Text(representative.name)
+                Text(member.name)
                     .font(.title2.bold())
-                Text(representative.roleDescription)
+                Text(member.roleDescription)
                     .font(.headline)
                     .foregroundStyle(partyColor)
-                Label(representative.tenureDescription, systemImage: "clock")
+                Label(member.tenureDescription, systemImage: "clock")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -97,11 +187,15 @@ struct RepresentativeDetailView: View {
 
     private var committeesSection: some View {
         ProfileSection(title: "Committees", systemImage: "person.3") {
-            if representative.committees.isEmpty {
-                EmptyNote("No committee assignments on record.")
+            if member.committees.isEmpty {
+                if isEnriching {
+                    loadingNote
+                } else {
+                    EmptyNote("No committee assignments on record.")
+                }
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(representative.committees, id: \.self) { committee in
+                    ForEach(member.committees, id: \.self) { committee in
                         Text("• \(committee)")
                             .font(.body)
                     }
@@ -112,9 +206,13 @@ struct RepresentativeDetailView: View {
 
     private var sponsorshipSection: some View {
         ProfileSection(title: "Bills", systemImage: "doc.text") {
-            VStack(alignment: .leading, spacing: 14) {
-                BillGroup(title: "Sponsored", bills: representative.sponsoredBills)
-                BillGroup(title: "Cosponsored", bills: representative.cosponsoredBills)
+            if isEnriching && member.sponsoredBills.isEmpty && member.cosponsoredBills.isEmpty {
+                loadingNote
+            } else {
+                VStack(alignment: .leading, spacing: 14) {
+                    BillGroup(title: "Sponsored", bills: member.sponsoredBills)
+                    BillGroup(title: "Cosponsored", bills: member.cosponsoredBills)
+                }
             }
         }
     }
@@ -123,7 +221,7 @@ struct RepresentativeDetailView: View {
     /// contact details have loaded so the profile doesn't show an empty card.
     @ViewBuilder
     private var contactSection: some View {
-        if let contact = representative.contact, contact.hasContent {
+        if let contact = member.contact, contact.hasContent {
             ProfileSection(title: "Contact", systemImage: "envelope") {
                 VStack(alignment: .leading, spacing: 12) {
                     if let website = contact.website {
@@ -166,11 +264,15 @@ struct RepresentativeDetailView: View {
     /// to the same detail screen the feed opens.
     private var votingHistorySection: some View {
         ProfileSection(title: "Voting History", systemImage: "checklist") {
-            if representative.keyVotes.isEmpty {
-                EmptyNote("No recent votes on record.")
+            if member.keyVotes.isEmpty {
+                if isEnriching {
+                    loadingNote
+                } else {
+                    EmptyNote("No recent votes on record.")
+                }
             } else {
                 VStack(spacing: 14) {
-                    ForEach(representative.keyVotes, id: \.self) { vote in
+                    ForEach(member.keyVotes, id: \.self) { vote in
                         VoteRow(vote: vote)
                     }
                 }
@@ -203,15 +305,15 @@ struct RepresentativeDetailView: View {
     /// Resolves which state to show from the snapshot, the curated abstainer
     /// list, and the member's disclosed-trade count.
     private var marketState: MarketState {
-        if let performance = representative.marketPerformance {
+        if let performance = member.marketPerformance {
             return .ranked(performance)
         }
-        if let note = MarketPerformanceService().abstention(for: representative) {
+        if let note = MarketPerformanceService().abstention(for: member) {
             return .abstains(note: note)
         }
         // Both chambers' disclosure sources give a real recent-trade count; if
         // that source couldn't be reached, fall through to the generic link.
-        if let activity = representative.tradingActivity, activity.isCovered {
+        if let activity = member.tradingActivity, activity.isCovered {
             return activity.recentReportCount > 0 ? .tradesUnranked : .noRecentTrades
         }
         return .unranked
@@ -264,7 +366,7 @@ struct RepresentativeDetailView: View {
     /// covers the member's chamber.
     @ViewBuilder
     private var tradingSection: some View {
-        if let activity = representative.tradingActivity {
+        if let activity = member.tradingActivity {
             ProfileSection(title: "Stock Trades", systemImage: "chart.line.uptrend.xyaxis") {
                 VStack(alignment: .leading, spacing: 10) {
                     if !activity.isCovered {
@@ -307,11 +409,15 @@ struct RepresentativeDetailView: View {
 
     private var pacFundersSection: some View {
         ProfileSection(title: "Top PAC Funders", systemImage: "dollarsign.circle") {
-            if representative.funders.isEmpty {
-                EmptyNote("Funding data unavailable.")
+            if member.funders.isEmpty {
+                if isEnriching {
+                    loadingNote
+                } else {
+                    EmptyNote("Funding data unavailable.")
+                }
             } else {
                 VStack(alignment: .leading, spacing: 12) {
-                    ForEach(representative.funders, id: \.self) { funder in
+                    ForEach(member.funders, id: \.self) { funder in
                         FunderRow(funder: funder)
                     }
                     Text("Direct contributions from each organization's political action committee (PAC). Federal law bars companies and unions from donating to candidates directly.")
@@ -326,11 +432,15 @@ struct RepresentativeDetailView: View {
     /// Top individual contributors, grouped by employer or occupation.
     private var individualFundersSection: some View {
         ProfileSection(title: "Top Individual Funders", systemImage: "person.2") {
-            if representative.individualFunders.isEmpty {
-                EmptyNote("Individual contributor data unavailable.")
+            if member.individualFunders.isEmpty {
+                if isEnriching {
+                    loadingNote
+                } else {
+                    EmptyNote("Individual contributor data unavailable.")
+                }
             } else {
                 VStack(alignment: .leading, spacing: 12) {
-                    ForEach(representative.individualFunders, id: \.self) { funder in
+                    ForEach(member.individualFunders, id: \.self) { funder in
                         FunderRow(funder: funder)
                     }
                     Text("Individual donations totaled by the employer or occupation each contributor reported. \"Employees\" means staff of that organization gave personally — the organization itself cannot.")

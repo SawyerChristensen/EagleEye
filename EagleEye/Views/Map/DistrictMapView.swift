@@ -47,14 +47,21 @@ struct DistrictMapView: View {
                 Map(position: $position) {
                     if let worldMask {
                         MapPolygon(worldMask)
-                            .foregroundStyle(.gray.opacity(0.35))
+                            .foregroundStyle(.black.opacity(0.2))
+                            // MapKit has no API to hide physical-feature labels
+                            // ("Rocky Mountains", etc.) on the standard basemap.
+                            // Drawing the overlays *above* the label layer (they
+                            // default to `.aboveRoads`, below labels) lets the
+                            // fill wash paint over that text and suppress it.
+                            .mapOverlayLevel(level: .aboveLabels)
                     }
 
                     ForEach(districtBoundaries) { boundary in
                         ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
                             MapPolygon(coordinates: closed(ring))
-                                .foregroundStyle(fillColor(for: boundary).opacity(0.28))
-                                .stroke(.secondary.opacity(0.5), lineWidth: 0.75)
+                                .foregroundStyle(fillColor(for: boundary).opacity(0.4))
+                                .stroke(.secondary.opacity(0.5), lineWidth: 1)
+                                .mapOverlayLevel(level: .aboveLabels)
                         }
                     }
 
@@ -131,10 +138,22 @@ struct DistrictMapView: View {
     /// without touching the country's own territory.
     private static func buildWorldMask(from states: [MapBoundary]) -> MKPolygon? {
         guard !states.isEmpty else { return nil }
+        // Longitude -180 and +180 are the same meridian, so a rectangle whose
+        // edges run straight from one to the other collapses into a degenerate
+        // sliver — MapKit then fills only the interior cut-outs (the US) instead
+        // of everything around them. Breaking each horizontal edge into spans
+        // shorter than 180° (midpoints at ±90 and 0) forces MapKit to render a
+        // real, full-globe rectangle so the cut-outs behave as holes.
         let world = [
             CLLocationCoordinate2D(latitude: 85, longitude: -180),
+            CLLocationCoordinate2D(latitude: 85, longitude: -90),
+            CLLocationCoordinate2D(latitude: 85, longitude: 0),
+            CLLocationCoordinate2D(latitude: 85, longitude: 90),
             CLLocationCoordinate2D(latitude: 85, longitude: 180),
             CLLocationCoordinate2D(latitude: -85, longitude: 180),
+            CLLocationCoordinate2D(latitude: -85, longitude: 90),
+            CLLocationCoordinate2D(latitude: -85, longitude: 0),
+            CLLocationCoordinate2D(latitude: -85, longitude: -90),
             CLLocationCoordinate2D(latitude: -85, longitude: -180),
         ]
         let holes = states.flatMap { $0.rings }.map { ring in
@@ -321,24 +340,61 @@ private struct DistrictOutlineShape: Shape {
               let maxLon = points.map(\.longitude).max()
         else { return path }
 
+        // A degree of longitude spans less ground than a degree of latitude by
+        // a factor of cos(latitude). Without this correction the outline is
+        // stretched east-west and appears squashed vertically.
+        let midLat = (minLat + maxLat) / 2
+        let lonScale = max(cos(midLat * .pi / 180), .ulpOfOne)
+
         let latSpan = max(maxLat - minLat, .ulpOfOne)
-        let lonSpan = max(maxLon - minLon, .ulpOfOne)
+        let lonSpan = max((maxLon - minLon) * lonScale, .ulpOfOne)
         let scale = min(rect.width / lonSpan, rect.height / latSpan)
         let originX = rect.minX + (rect.width - lonSpan * scale) / 2
         let originY = rect.minY + (rect.height - latSpan * scale) / 2
 
         func point(_ coordinate: CLLocationCoordinate2D) -> CGPoint {
             CGPoint(
-                x: originX + (coordinate.longitude - minLon) * scale,
+                x: originX + (coordinate.longitude - minLon) * lonScale * scale,
                 y: originY + (maxLat - coordinate.latitude) * scale
             )
         }
 
+        // Soften only the corners: run straight along each edge until a short
+        // distance from the vertex, then a small quad curve around it. Straight
+        // edges stay on their true path; `cornerCut` controls how much of each
+        // corner is rounded — small, so the effect is subtle.
+        let cornerCut: CGFloat = 1.5
+
         for ring in rings {
-            guard let first = ring.first else { continue }
-            path.move(to: point(first))
-            for coordinate in ring.dropFirst() {
-                path.addLine(to: point(coordinate))
+            let pts = ring.map(point)
+            guard pts.count > 2 else {
+                if let first = pts.first {
+                    path.move(to: first)
+                    for p in pts.dropFirst() { path.addLine(to: p) }
+                    path.closeSubpath()
+                }
+                continue
+            }
+
+            // A point offset from `from` toward `to`, capped at half the
+            // segment length so short edges never overshoot into artifacts.
+            func offset(from a: CGPoint, toward b: CGPoint) -> CGPoint {
+                let dx = b.x - a.x, dy = b.y - a.y
+                let len = (dx * dx + dy * dy).squareRoot()
+                guard len > 0 else { return a }
+                let d = min(cornerCut, len / 2)
+                return CGPoint(x: a.x + dx / len * d, y: a.y + dy / len * d)
+            }
+
+            let count = pts.count
+            func entry(_ i: Int) -> CGPoint { offset(from: pts[i], toward: pts[(i + count - 1) % count]) }
+            func exit(_ i: Int) -> CGPoint { offset(from: pts[i], toward: pts[(i + 1) % count]) }
+
+            path.move(to: entry(0))
+            for i in 0..<count {
+                // Round the corner at vertex i, then run straight to the next.
+                path.addQuadCurve(to: exit(i), control: pts[i])
+                path.addLine(to: entry((i + 1) % count))
             }
             path.closeSubpath()
         }

@@ -58,6 +58,16 @@
 - [x] Transition the "Your Representatives" section into having their party color as a shadow rather than an outline. Have a simpler list. Maybe comment out how we build the current view so that we can use it later. Now it should be a list where the most senior senator is one top, followed by the other senator, with the representative on bottom. This should replace the 2-a-row feature we have right now and there should be lines in between each
 - [x] Some of the icons are a little dark. Is there anything similar to the photos app "magic wand" feature that automatically makes photos look good? That should be applied to each photo we get to automatically fix any lighting issues in their official portrait
 - [x] The icons for each representative should be a little bigger, as well as the text. Also, the partisan glow/shadow color around the candidates icons should be centered, and not a little south, which it appears to be
+- [ ] The recent bills section seems finicky. Yesterday there was an enacted bill as the top bill. now the only one shown is from april 17.
+  - [ ] Hide bills that start with the text "To designate the" or "To name the"
+- [ ] ADD GOVERNORS TO THE REPRESENTATIVES LIST (if there is a central list of governors to pull from so that we can fill all 50 states) (check if already done) (no big deal if unfeasible, but try)
+  - [ ] Instead of a Committees and bills section, just have a "Pills passed into law" section above the contact information. 
+  - [ ] Still have the money section and fill it with top pac funders/top individual funders just like we do congressmen
+- [ ] Seperate the senators/representatives from your governor in the "your representatives list". There should be a subheader that says "In Congress" and then "In [current state's capitol city]"
+- [ ] Confirm if the user is presented with the "share your location" text every time only during debugging with the current scheme
+- [ ] Change the progress pill sf symbols. if it is in house committee, the sf symbol should be "person.3". if its in senate committee, it should be "person.3.fill". if its "to president" it should be "person.fill", if its enacted, it should be "scroll",
+- [ ] Make the representatives icons and text in their list slightly bigger
+- [ ] In the bill detail section, where there are progress pills under the title, they should display their associated sf symbol as well.
 
 ---
 
@@ -72,18 +82,25 @@
   - [x] Fill the congressional districts with party color, with each representative in the middle of the district or the district capitol (if there is one) (THIS WAS PREVIOUSLY MARKED AS DONE. IT DOES NOT WORK. THE DISTRICTS DO NOT FILL WITH PARTY COLOR
     - [x] If a distrct is tapped on, the name of the district should pop up on a sheet that only fills the bottom half of the screen. the sheet should be draggable if the user wants to drag it up so that it fills all of the screen (it can still be dragged down and dismissed)
     - [x] The sheet should have the district name with a copy of the district outline on the right and the representatives profile underneath it. This of course can be expanded as described above
-  - [x] Fix all project warnings
   - [x] When the map is opened, the user should be centered on their home district and zoomed in so that district is roughly edge to edge width or heightwise, whichever comes first
     - [x] ^ this takes awhile to center. is this because everything is being retrieved, and then the users location is found? what if we center on the user at a certain wide zoom, and then adjust later?
-    - [x] There should be a button that recenters the user on their home district. I CANNOT SEE THIS BUTTON. You have previously commit twice saying that there is a button. I cannot see any recentering button in the actual map
+    - [x] There should be a button that recenters the user on their home district.
+    - [ ] This button should be near the top of the screen like the system one and follow the liquid glass look. Is there a way to keep the system button appearance but change its recentering behavoir? if not, make the button a little bigger, the backgorund of the button a little mroe glassy, and have transition from a cursor that is an outline to one that is filled depending on if the user tapped it/is now centered on the user
   - [x] Everything outside the US should be tinted a little grey, and geographic information like mountain ranges/basins shouldnt be visible. it clutters the map
   - [x] Retrieve ALL state representatives and their associated district in the backend of the app. we only display this in the map section
     - [x] Do the same ^ for governors
+    - [x] Currently there are no other representatives displayed other than the users own centered in their district on the map. Fix that *(tapping any district on the map already surfaced a bare name/party from the nationwide roster; that profile now enriches on demand — committees, sponsored/cosponsored bills, contact info, and PAC/individual funders fetch and cache the first time it's opened, via `RepresentativeProfileCache` — so drilling into a representative other than your own from the map shows a full profile, not just a name)*
     - [x] Currently the district map filled with each parties color does not work. mine only worked when I tapped on the land around my location. Only then did it fill in with color and my local representatives icon appear. When I tap on other districts, they dont have a color, but a sheet still shows up. it just says something like "Oregon's 5th District" with no outline next to it or representative under it. Fix this first *(resolved by the nationwide `NationalHouseDirectory` fetch — `partyByDistrict` and the tapped-district representative lookup in `DistrictMapView` now key off the full nationwide roster instead of just the user's own delegation, so every district fills and resolves, not only the user's own)*
-    - [ ] After this is fixed ^ we should add more information per district. Each district should display some basic information about the district, like the population count, top sectors/industry, top cities by population, top universties, and anything else relevant to the district. it should still show the representative
-    - [ ] Zoom out to state level to see governors. display the governor icons in the middle of the state. The state outline should be filled with the state flag instead of a single party color.
+    - [ ] In dark mode the blue and red should be slightly brighter
+    - [ ] Add more information per district. Each district should display some basic information about the district, like the population count, top sectors/industry, top cities by population, top universties, and anything else relevant to the district. it should still show the representative. Feel free to split this into smaller tasks and add to-do list items under it. Right now the district detail section just shows the representative, but it should show more information
+    - [ ] Once a certain zoom level is reached, out to the state level, display the governors icons in the middle of the state. The state outline should be filled with the state flag instead of a single party color.
       - [ ] The transition between the different color coded district outlines and the state flag/state level representatives should be smooth
-      - [x] The "go back to user location" button in the top right should not adjust zoom level too much. it shouldnt zoom in to their neighborhood. just their district, as that is what is relevant in this context
+      - [ ] Like the district information view, the state should show an outline of the state with the flag inside of it. this should also not be squashed and be recreated similar to how the mini district previews are rendered.
+      - [ ] The state level information view should have information about the state, similar to what the districts have. total population, top sectors/industry, top cities by population, top universities, etc. this view should should show the governor on top, the two senators, and list of all house representatives in the state under the senators
+    - [x] The "go back to user location" button in the top right should not adjust zoom level too much. it shouldnt zoom in to their neighborhood. just their district, as that is what is relevant in this context
+- [ ] Improve the general performance of the map. Improve the fps, and maybe fix artifacts like the black overlay on the rest of the world having to fill in when the user zooms out fast. currently it only seems to take up the part of the screen the user is looking at
+- [ ] The alaska district preview is a little wonky. it shows the state on the left, and then a tiny dot on the right. is this because the state goes from negative to positive longitute? fix the alaska district detail outline
+- [ ] Some districts dont have representatives on file. theres one in california that I see, one in texas, one in florida, and one in peurto rico. Is this a bug or are there truly no representatives for that district? 
 
 ---
 
@@ -103,8 +120,9 @@
 ## 0.6 — iOS integration
 
 - [x] Add home screen widgets that show what would be shown as the top bill in the recent bills feed
-  - [x] Currently the home screen widgets are broken. While I can add one to my home screen, it says "No bill available" and doesnt display anything. It should display the bill title as shown in in app, the description. The background of the widget should match the color of the status of the bill. In committee, grey. Passed house or senate, blue, and enacted, green. Instead of a progress pill, it should just have the status text on the top of the widget as a header above the title. This color should of course be deactived if the user has a clear or tinted homescreen. The background should be the only "colored" thing. The text should be either white or some sort of greys
   - [x] Expand the text vertically and horizontally. the text should take up more space in the widget
+  - [ ] This is broken. currently the text is larger than the actual widget. is it possible to detect the widget's bounds?
+  - [ ] Center the progress text at the top of the widget
   - [x] When tapping on the widget, the user should automatically be sent to the bill that was displayed detail view, with a back button sending them to recent bills.
 - [x] Add system notifications for new bills being passed
   - [x] Recently enacted laws should be a push notification

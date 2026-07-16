@@ -83,6 +83,10 @@ final class RepresentativesStore {
         if let cache = Self.loadCache(), !cache.representatives.isEmpty {
             representatives = cache.representatives
             cachedCoordinate = cache.coordinate
+            // Seed the on-demand profile cache from the persisted delegation so
+            // opening one of these members from the map reuses it immediately,
+            // even before the first background refresh.
+            representatives.forEach(RepresentativeProfileCache.store)
             loadState = .ready
         }
     }
@@ -127,6 +131,10 @@ final class RepresentativesStore {
                 )
                 cachedCoordinate = coordinate
                 Self.saveCache(coordinate: coordinate, representatives: representatives)
+                // Share the freshly enriched delegation with the on-demand
+                // profile cache so opening one of these members from the map
+                // reuses this data instead of fetching it all over again.
+                representatives.forEach(RepresentativeProfileCache.store)
                 loadState = .ready
             } catch CongressService.ServiceError.missingAPIKey {
                 // No key configured: keep any cached delegation on a silent
