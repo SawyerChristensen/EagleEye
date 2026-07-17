@@ -154,6 +154,18 @@ struct BillDetailView: View {
             }
         case .recorded(let tallies):
             VStack(alignment: .leading, spacing: 24) {
+                let userVotes = combinedUserVotes(in: tallies)
+                if !userVotes.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Your Representatives")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.secondary)
+                        ForEach(userVotes) { vote in
+                            MemberVoteRow(vote: vote, highlighted: true)
+                        }
+                    }
+                }
+
                 ForEach(Array(tallies.enumerated()), id: \.offset) { _, tally in
                     VStack(alignment: .leading, spacing: 10) {
                         // Label the chamber so a bill with both a House and a
@@ -184,6 +196,20 @@ struct BillDetailView: View {
     /// tally: Bioguide IDs for the House, state+surname keys for the Senate.
     private func userIDs(for chamber: Chamber) -> Set<String> {
         chamber == .senate ? userRepMatchKeys : userRepIDs
+    }
+
+    /// The user's own votes across every recorded tally — their House
+    /// representative and both senators together, House first — so all three
+    /// surface in one spot instead of being split across separate per-chamber
+    /// sections.
+    private func combinedUserVotes(in tallies: [BillVoteTally]) -> [MemberVote] {
+        tallies
+            .sorted { $0.chamber.rawValue < $1.chamber.rawValue } // "House" < "Senate"
+            .flatMap { tally in
+                tally.memberVotes
+                    .filter { userIDs(for: tally.chamber).contains($0.id) }
+                    .sorted { $0.name < $1.name }
+            }
     }
 
     /// Explains *why* there's no tally. When the record names how the bill
@@ -401,21 +427,15 @@ private extension BillStatus {
 
 // MARK: - Tally
 
-/// The full roll-call breakdown: a summary bar and legend, the user's own
-/// representatives' votes on top, and the complete member-by-member list behind
-/// a disclosure.
+/// The full roll-call breakdown for one chamber: a summary bar, legend, and the
+/// complete member-by-member list behind a disclosure. The user's own members
+/// are surfaced once, combined across chambers, above every chamber's tally —
+/// see `combinedUserVotes` in `BillDetailView`.
 private struct VoteTallyView: View {
     let tally: BillVoteTally
     let userRepIDs: Set<String>
 
     @State private var showAll = false
-
-    /// The user's representatives who were recorded on this vote.
-    private var userReps: [MemberVote] {
-        tally.memberVotes
-            .filter { userRepIDs.contains($0.id) }
-            .sorted { $0.name < $1.name }
-    }
 
     /// Everyone, grouped by how they voted (Yea, Nay, Present, Not Voting) and
     /// alphabetical within each group.
@@ -431,17 +451,6 @@ private struct VoteTallyView: View {
             header
             TallyBar(tally: tally)
             legend
-
-            if !userReps.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Your Representatives")
-                        .font(.subheadline.bold())
-                        .foregroundStyle(.secondary)
-                    ForEach(userReps) { vote in
-                        MemberVoteRow(vote: vote, highlighted: true)
-                    }
-                }
-            }
 
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) { showAll.toggle() }
