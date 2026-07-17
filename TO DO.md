@@ -5,7 +5,10 @@
   - [x] Instead of a Committees and bills section, just have a "Pills passed into law" section above the contact information. Find a source to pull recently enacted laws per state
   - [~] Still have the money section for governors like we do representatives and fill it with top pac funders/top individual funders just like we do representatives
     - [x] Add the "Top PAC Funders" / "Top Individual Funders" sections to the governor profile (mirroring `RepresentativeDetailView`), backed by a new `GovernorFunderDirectory` keyed by state — seeded empty for now since, unlike representatives' live OpenFEC lookup, there's no free API for gubernatorial campaign finance across all 50 states
-    - [ ] Populate `GovernorFunderDirectory` with real, sourced top PAC/individual funder entries per state (hand-curated like `StateLawDirectory`, or wired to a verified state campaign-finance data source)
+    - [~] Populate `GovernorFunderDirectory` with real, sourced top PAC/individual funder entries per state (hand-curated like `StateLawDirectory`, or wired to a verified state campaign-finance data source)
+      - [x] Add sourced PAC/individual funder entries for IL, MI, and FL (OpenSecrets / Transparency USA, 2022 races)
+      - [ ] Add sourced PAC/individual funder entries for TX, GA, and CO
+      - [ ] Add sourced PAC/individual funder entries for CA, NY, and OH
   - [ ] Pull governors headshots from the national governors association
 
 - [ ] Build the interactive map view (evaluate performance and utility)
