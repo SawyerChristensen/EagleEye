@@ -29,10 +29,9 @@ struct DistrictMapView: View {
     @State private var cityDirectory = DistrictCityDirectory()
     @State private var universityDirectory = DistrictUniversityDirectory()
 
-    /// Whether the camera is currently zoomed out far enough to treat this
-    /// as a "state level" view: district fills/pins swap for flag-filled
-    /// states with a governor pin apiece.
-    @State private var isStateLevel = false
+    /// The camera's current latitude span, updated continuously as the user
+    /// pans/zooms — drives `stateLevelProgress` below.
+    @State private var visibleLatitudeSpan: Double = 0
     @State private var stateFlagImages: [String: Image] = [:]
     @State private var stateFlagPixelSizes: [String: CGSize] = [:]
     @State private var loadingFlagStates: Set<String> = []
@@ -45,11 +44,24 @@ struct DistrictMapView: View {
 
     @Environment(\.colorScheme) private var colorScheme
 
-    /// Once the visible region spans at least this many degrees of
-    /// latitude, individual districts are too small to read — the map
-    /// treats this as "state level" and swaps district fills/pins for
-    /// flag-filled states with governor pins.
-    private static let stateLevelSpanThreshold: Double = 6.0
+    /// The band of latitude span (in degrees) over which the map crossfades
+    /// from district-level content to state-level content. Below the lower
+    /// bound districts are legible and shown at full strength; above the
+    /// upper bound they're too small to read and the state flags/governor
+    /// pins are shown at full strength instead. Within the band both layers
+    /// render simultaneously at partial opacity so the swap reads as a
+    /// smooth fade rather than an instant cut.
+    private static let stateLevelLowerSpan: Double = 5.0
+    private static let stateLevelUpperSpan: Double = 7.0
+
+    /// 0 at district-level zoom, 1 once fully zoomed out to state level, and
+    /// a continuous fraction while crossing the band between.
+    private var stateLevelProgress: Double {
+        let span = visibleLatitudeSpan
+        if span <= Self.stateLevelLowerSpan { return 0 }
+        if span >= Self.stateLevelUpperSpan { return 1 }
+        return (span - Self.stateLevelLowerSpan) / (Self.stateLevelUpperSpan - Self.stateLevelLowerSpan)
+    }
 
     /// Members to show as pins. Senators are excluded for now — they represent
     /// a whole state rather than a single district, so they have no "middle of
@@ -83,12 +95,20 @@ struct DistrictMapView: View {
                             .mapOverlayLevel(level: .aboveLabels)
                     }
 
-                    if isStateLevel {
+                    // Both layers render across the crossfade band (rather than
+                    // an `if/else` toggle) so the swap between district fills
+                    // and state flags reads as a fade instead of a hard cut —
+                    // each layer's opacity carries `stateLevelProgress` (or its
+                    // complement) baked into its style. Outside the band, the
+                    // fully-faded layer is skipped entirely to avoid paying for
+                    // invisible content at rest.
+                    let progress = stateLevelProgress
+                    if progress > 0 {
                         ForEach(stateBoundaries) { boundary in
                             ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
                                 MapPolygon(coordinates: closed(ring))
-                                    .foregroundStyle(stateFillStyle(for: boundary))
-                                    .stroke(.primary.opacity(0.85), lineWidth: 2)
+                                    .foregroundStyle(stateFillStyle(for: boundary, progress: progress))
+                                    .stroke(.primary.opacity(0.85 * progress), lineWidth: 2)
                                     .mapOverlayLevel(level: .aboveLabels)
                             }
                         }
@@ -97,15 +117,18 @@ struct DistrictMapView: View {
                             if let governor = GovernorDirectory.governor(forState: boundary.state) {
                                 Annotation(governor.name, coordinate: boundary.centroid) {
                                     GovernorPortrait(governor: governor, size: 40, style: .outline)
+                                        .opacity(progress)
                                 }
                             }
                         }
-                    } else {
+                    }
+
+                    if progress < 1 {
                         ForEach(districtBoundaries) { boundary in
                             ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
                                 MapPolygon(coordinates: closed(ring))
-                                    .foregroundStyle(fillColor(for: boundary).opacity(0.4))
-                                    .stroke(.secondary.opacity(0.5), lineWidth: 1)
+                                    .foregroundStyle(fillColor(for: boundary).opacity(0.4 * (1 - progress)))
+                                    .stroke(.secondary.opacity(0.5 * (1 - progress)), lineWidth: 1)
                                     .mapOverlayLevel(level: .aboveLabels)
                             }
                         }
@@ -113,7 +136,7 @@ struct DistrictMapView: View {
                         ForEach(stateBoundaries) { boundary in
                             ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
                                 MapPolyline(coordinates: closed(ring))
-                                    .stroke(.primary.opacity(0.85), lineWidth: 2)
+                                    .stroke(.primary.opacity(0.85 * (1 - progress)), lineWidth: 2)
                             }
                         }
 
@@ -121,6 +144,7 @@ struct DistrictMapView: View {
                             if let coordinate = districtCenter(for: rep) {
                                 Annotation(rep.name, coordinate: coordinate) {
                                     RepresentativePortrait(representative: rep, size: 40, style: .outline)
+                                        .opacity(1 - progress)
                                 }
                             }
                         }
@@ -141,11 +165,14 @@ struct DistrictMapView: View {
                     isCenteredOnUserDistrict = isRegion(context.region, centeredOn: userDistrictBoundary)
                 }
                 .onMapCameraChange(frequency: .continuous) { context in
-                    isStateLevel = context.region.span.latitudeDelta > Self.stateLevelSpanThreshold
+                    visibleLatitudeSpan = context.region.span.latitudeDelta
                     visibleMapRect = context.rect
                 }
-                .onChange(of: isStateLevel) { _, zoomedToStateLevel in
-                    guard zoomedToStateLevel else { return }
+                .onChange(of: stateLevelProgress > 0) { _, enteredStateLevelBand in
+                    // Start loading flags as soon as the crossfade band is
+                    // entered, not just once fully at state level, so images
+                    // are ready by the time the fade completes.
+                    guard enteredStateLevelBand else { return }
                     for boundary in stateBoundaries {
                         loadFlagImageIfNeeded(for: boundary.state)
                     }
@@ -282,23 +309,26 @@ struct DistrictMapView: View {
     /// image, scaled to cover the polygon's on-screen bounding box (the same
     /// "fill the frame, crop the excess" look as `StateFlagImage`'s
     /// `.scaledToFill()`), or a neutral placeholder tint while the flag is
-    /// still loading.
-    private func stateFillStyle(for boundary: MapBoundary) -> AnyShapeStyle {
+    /// still loading. `progress` (0...1, from `stateLevelProgress`) is baked
+    /// into the style's own opacity so this layer crossfades in as the
+    /// district layer crossfades out, rather than popping in at full
+    /// strength.
+    private func stateFillStyle(for boundary: MapBoundary, progress: Double) -> AnyShapeStyle {
         guard let image = stateFlagImages[boundary.state],
               let pixelSize = stateFlagPixelSizes[boundary.state],
               pixelSize.width > 0, pixelSize.height > 0,
               screenPointsPerMapUnit > 0
         else {
-            return AnyShapeStyle(Color.secondary.opacity(0.25))
+            return AnyShapeStyle(Color.secondary.opacity(0.25 * progress))
         }
         let span = mapUnitSpan(for: boundary)
         let boxWidth = span.width * screenPointsPerMapUnit
         let boxHeight = span.height * screenPointsPerMapUnit
         guard boxWidth > 0, boxHeight > 0 else {
-            return AnyShapeStyle(Color.secondary.opacity(0.25))
+            return AnyShapeStyle(Color.secondary.opacity(0.25 * progress))
         }
         let scale = max(boxWidth / pixelSize.width, boxHeight / pixelSize.height)
-        return AnyShapeStyle(ImagePaint(image: image, scale: CGFloat(scale)))
+        return AnyShapeStyle(ImagePaint(image: image, scale: CGFloat(scale)).opacity(progress))
     }
 
     /// Loads and caches a state's flag the first time it's needed for the
