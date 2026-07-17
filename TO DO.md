@@ -1,128 +1,23 @@
-# Project Roadmap
+# To Do
 ---
 
-## ✅ 0.1 — Foundation (Done)
-
-- [x] Initial UI mockups and project architecture
-- [x] Implement representative lookup by user location
-- [x] Home feed pulls real data via Congress API
-  - [x] Summarize each bill
-    - [x] Position "H.R. {number}" at end of title, one smaller font size
-    - [x] Remove title and "This bill" from summaries
-- [x] Populate representative profile: Committees
-- [x] Populate representative profile: Bills (sponsored & cosponsored)
-- [x] Voting History — House Representatives: summarize votes, discard in-committee ones
-
----
-
-## 0.2 — Feed & Profile Polish *(no new data sources)*
-
-- [x] Rank each bill by how far it got (introduced → committee → passed → president's desk → enacted); importance trait decays with time so the most important, active bills surface on top
-- [x] Each profile bill has a right arrow that opens the expanded bill detail screen
-- [x] Voting History uses the same collapsible/fade view that the bills sections use
-- [x] Add the roll-call tally to each bill's detail screen — who voted and which way — with the user's representatives surfaced on top
-- [x] Each bill should have the HR code next to the "Bill" title on top in the center of the screen, right of the arrow, and not in the main title in the feed
-- [x] Center the heading/title abvo
-- [x] passed house in home view is squased, also consider removing the pill look
-- [x] Some bills say "passed house" but dont display a roll call vote
-- [x] Some bills say "last action on" and then a date that is older than when the last vote was. also move this form below the summary to under a dividor under the voting history
-- [x] Make the sample topic list only have one topic to reflect real bills. also match it to the real 32 list the library of congress uses. also, append a best-matching SF symbol to what the topic is
-- [x] Add another pill after the "passed house" pill that shows what the next step for the bill is or where the bill is now in the detail view. either in the senate, or if passed both, on the presidents desk, etc. show the future one in grey as it hasnt happened yet. also maybe show the past step behind it to the left, blur where the pills is exceeding bounds similar to how the topic pill blurs out in the home feed if that same approach is advisable.
-- [x] **QOL:** Skip the location loading screen when we already have the user's location
-
----
-
-## 0.3 — Richer Representative Data *(requires new external sources)*
-
-- [x] Voting History for Senators *(senate.gov roll-call XML — Congress.gov roll calls are House-only)*
-  - [x] Add to profile
-  - [x] Add their votes under bill details if something is voted on in the senate
-- [x] Office contact information in the profile
-  - [x] Link to their social media
-  - [x] Add icons in the pill of each social media link
-- [x] Top Funders *(OpenFEC API — needs a free api.data.gov key in Secrets.plist as `OpenFECAPIKey`)\*
-- [x] change the initial location screen to ask if the user wants to share their location or enter a zipcode. if they tap find, then ask iOS for the system prompt
-- [x] When finding initial location, it displays the sample data in the representatives view. it should be blank until the real representatives load in
-- [x] Inlcude recent bills that failed in the feed, so you can see if your senator or representative voted against something you wouldve supported.
-  - [x] Prioritize recent bills in this priority: 1) recently enacted, 2) recently failed but passed one chamber 3) passed one chamber 4) recently failed but passed committee 5) passed committe 6) introduced and update the progress pills accordingly
-- [x] "Beats the market" / insider-trading / corruption meter *(needs a trading-disclosure data source)* — trading-activity transparency shipped; quantitative scoring deferred to post-launch (see Version 1.1)
-  - [x] Trading-activity indicator — House Periodic Transaction Report (PTR) count for the past year, latest-filing date, and a link to the filing, from the free House Clerk disclosure index (on-device ZIP + TSV parsing, no key). Senators link out to the Senate eFD portal.
-  - [x] Senate coverage — parse efdsearch.senate.gov (agreement + CSRF + DataTables JSON) for senators' PTRs
-  - [-] "Beats the market" quantitative metric — moved to Version 1.1 (post-launch); realistically a backend job (PDF parsing + historical price data source), not feasible on-device
-- [x] Add 3 tabs to the representative view. 1st tab is about (Committees, Bills, Contact info), 2nd tab is voting history (show the full title for each bill as it appears on the home feed, with an arrow to view the bills full details, should go to the same screen we end up on if tapped on from the home screen), 3rd tab should be the money tab the ("Beats the market"/ insider-trading / corruption meter), stock trades, top PAC funders,  top individual funders
-  - [x] Add top individual funders, specify they are employees if the category is a company. if "Attorney" expand to plural form ie "Attornies"
-  - [x] About section shoud have an "i" icon, Votes the voting history icon, and money a dollar bill sf symbol in the tab view next to the text
-- [x] Expand the recent bills section to load more if the user reaches the bottom of the feed
-- [x] Locating seems to take a LONG time. How about we progress to the home "recent bills" section while this is happening and location detection continues in the background? Only kicking back to the loading screen if theres some sort of error?
-  - [x] This works, but kind of. right now the user taps "locate" and view instantly progresses to the home recent bills section at the same time apple system prompt shows up asking the user if they want to share their exact or approximate location. the view should only progress after the user makes a choice in this selection. before then, while the apple location prompt is up on the screen, the user should still see the onboarding location view in the background.
-- [x] Transition the "Your Representatives" section into having their party color as a shadow rather than an outline. Have a simpler list. Maybe comment out how we build the current view so that we can use it later. Now it should be a list where the most senior senator is one top, followed by the other senator, with the representative on bottom. This should replace the 2-a-row feature we have right now and there should be lines in between each
-- [x] Some of the icons are a little dark. Is there anything similar to the photos app "magic wand" feature that automatically makes photos look good? That should be applied to each photo we get to automatically fix any lighting issues in their official portrait
-- [x] The icons for each representative should be a little bigger, as well as the text. Also, the partisan glow/shadow color around the candidates icons should be centered, and not a little south, which it appears to be
-- [x] The recent bills section seems finicky. Yesterday there was an enacted bill as the top bill. now the only one shown is from april 17.
-  - [x] Hide bills that start with the text "To designate the" or "To name the"
 - [x] ADD GOVERNORS TO THE REPRESENTATIVES LIST (if there is a central list of governors to pull from so that we can fill all 50 states) (check if already done) (no big deal if unfeasible, but try)
-  - [ ] Instead of a Committees and bills section, just have a "Pills passed into law" section above the contact information. Find a source to pull recently enacted laws per state
+  - [x] Instead of a Committees and bills section, just have a "Pills passed into law" section above the contact information. Find a source to pull recently enacted laws per state
   - [ ] Still have the money section for governors like we do representatives and fill it with top pac funders/top individual funders just like we do representatives
   - [ ] Pull governors headshots from the national governors association
-- [x] Seperate the senators/representatives from your governor in the "your representatives list". There should be a subheader that says "In Congress" and then "In [current state's capitol city]"
-- [x] Confirm if the user is presented with the "share your location" text every time only during debugging with the current scheme *(confirmed — the shared scheme's `-ResetDelegationCache` launch argument is enabled by default, and `RepresentativesStore.init()` wipes the cached delegation under `#if DEBUG` whenever it's present so onboarding can be retested; this compiles out entirely in Release/TestFlight/App Store builds, so real users only see the prompt once, after which the cached delegation skips straight to `.ready`)*
-- [x] Change the progress pill sf symbols. if it is in house committee, the sf symbol should be "person.3". if its in senate committee, it should be "person.3.fill". if its "to president" it should be "person.fill", if its enacted, it should be "scroll",
-- [x] Make the representatives icons and text in their list slightly bigger
-- [x] In the bill detail section, where there are progress pills under the title, they should display their associated sf symbol as well.
-
----
-
-## 0.4 — Interactive Map
 
 - [ ] Build the interactive map view (evaluate performance and utility)
-  - [x] The icons of representatives are currently misplaced. Jeff Merkley appears off the coast of Africa instead of in Washington DC. Actually, skip placing senators for now. but something wasnt working for him to be placed there
-    - [x] Pictures dont show up over the representatives name. Their icons should show up like they do in the list view
-  - [x] Find borders of all congressional districts give them small borders. Find borders for states and give them thicker borders
-  - [x] The current map is too detailed. Switch map modes so that it doesnt have all of the geographic features this one does. 
-  - [x] App crashed with: "Thread 45: EXC_RESOURCE (RESOURCE_TYPE_MEMORY: high watermark memory limit exceeded) (limit=3376 MB)"
-  - [x] Fill the congressional districts with party color, with each representative in the middle of the district or the district capitol (if there is one) (THIS WAS PREVIOUSLY MARKED AS DONE. IT DOES NOT WORK. THE DISTRICTS DO NOT FILL WITH PARTY COLOR
-    - [x] If a distrct is tapped on, the name of the district should pop up on a sheet that only fills the bottom half of the screen. the sheet should be draggable if the user wants to drag it up so that it fills all of the screen (it can still be dragged down and dismissed)
-    - [x] The sheet should have the district name with a copy of the district outline on the right and the representatives profile underneath it. This of course can be expanded as described above
-  - [x] When the map is opened, the user should be centered on their home district and zoomed in so that district is roughly edge to edge width or heightwise, whichever comes first
-    - [x] ^ this takes awhile to center. is this because everything is being retrieved, and then the users location is found? what if we center on the user at a certain wide zoom, and then adjust later?
-    - [x] There should be a button that recenters the user on their home district.
-    - [x] This button should be near the top of the screen like the system one and follow the liquid glass look. Is there a way to keep the system button appearance but change its recentering behavoir? if not, make the button a little bigger, the backgorund of the button a little mroe glassy, and have transition from a cursor that is an outline to one that is filled depending on if the user tapped it/is now centered on the user *(kept the custom overlay button rather than the stock control, since it needs custom recentering behavior; made it bigger (30pt → 38pt) with a more glassy `.ultraThinMaterial` background, subtle border and shadow, and its icon now animates between outline `location` and filled `location.fill` depending on whether the camera is currently framing the user's district)*
-  - [x] Everything outside the US should be tinted a little grey, and geographic information like mountain ranges/basins shouldnt be visible. it clutters the map
-  - [x] Retrieve ALL state representatives and their associated district in the backend of the app. we only display this in the map section
-    - [x] Do the same ^ for governors
-    - [x] Currently there are no other representatives displayed other than the users own centered in their district on the map. Fix that *(tapping any district on the map already surfaced a bare name/party from the nationwide roster; that profile now enriches on demand — committees, sponsored/cosponsored bills, contact info, and PAC/individual funders fetch and cache the first time it's opened, via `RepresentativeProfileCache` — so drilling into a representative other than your own from the map shows a full profile, not just a name)*
-    - [x] Currently the district map filled with each parties color does not work. mine only worked when I tapped on the land around my location. Only then did it fill in with color and my local representatives icon appear. When I tap on other districts, they dont have a color, but a sheet still shows up. it just says something like "Oregon's 5th District" with no outline next to it or representative under it. Fix this first *(resolved by the nationwide `NationalHouseDirectory` fetch — `partyByDistrict` and the tapped-district representative lookup in `DistrictMapView` now key off the full nationwide roster instead of just the user's own delegation, so every district fills and resolves, not only the user's own)*
-    - [x] In dark mode the blue and red should be slightly brighter
-    - [ ] Add more information per district. Each district should display some basic information about the district, like the population count, top sectors/industry, top cities by population, top universties, and anything else relevant to the district. it should still show the representative. Feel free to split this into smaller tasks and add to-do list items under it. Right now the district detail section just shows the representative, but it should show more information
-    - [ ] Once a certain zoom level is reached, out to the state level, display the governors icons in the middle of the state. The state outline should be filled with the state flag instead of a single party color.
-      - [ ] The transition between the different color coded district outlines and the state flag/state level representatives should be smooth
-      - [ ] Like the district information view, the state should show an outline of the state with the flag inside of it. this should also not be squashed and be recreated similar to how the mini district previews are rendered.
-      - [ ] The state level information view should have information about the state, similar to what the districts have. total population, top sectors/industry, top cities by population, top universities, etc. this view should should show the governor on top, the two senators, and list of all house representatives in the state under the senators
-    - [x] The "go back to user location" button in the top right should not adjust zoom level too much. it shouldnt zoom in to their neighborhood. just their district, as that is what is relevant in this context
+  - [ ] Add more information per district. Each district should display some basic information about the district, like the population count, top sectors/industry, top cities by population, top universties, and anything else relevant to the district. it should still show the representative. Feel free to split this into smaller tasks and add to-do list items under it. Right now the district detail section just shows the representative, but it should show more information
+  - [ ] Once a certain zoom level is reached, out to the state level, display the governors icons in the middle of the state. The state outline should be filled with the state flag instead of a single party color.
+    - [ ] The transition between the different color coded district outlines and the state flag/state level representatives should be smooth
+    - [ ] Like the district information view, the state should show an outline of the state with the flag inside of it. this should also not be squashed and be recreated similar to how the mini district previews are rendered.
+    - [ ] The state level information view should have information about the state, similar to what the districts have. total population, top sectors/industry, top cities by population, top universities, etc. this view should should show the governor on top, the two senators, and list of all house representatives in the state under the senators
+
 - [ ] Improve the general performance of the map. Improve the fps, and maybe fix artifacts like the black overlay on the rest of the world having to fill in when the user zooms out fast. currently it only seems to take up the part of the screen the user is looking at
-- [x] The alaska district preview is a little wonky. it shows the state on the left, and then a tiny dot on the right. is this because the state goes from negative to positive longitute? fix the alaska district detail outline
-- [x] Some districts dont have representatives on file. theres one in california that I see, one in texas, one in florida, and one in peurto rico. Is this a bug or are there truly no representatives for that district? *(confirmed bug for Puerto Rico — `SenateService.stateCode(for:)`'s name table had no entry for "puerto rico" (or DC/territories), so `districtKey` never matched the Resident Commissioner to the "PR-0" boundary key; fixed by adding those names to `statesByName`. The CA/TX/FL cases couldn't be verified against a live roster in this session — most likely genuine current House vacancies rather than a parsing bug, since no matching key-mismatch or filtering issue was found for ordinary numbered districts)*
-
----
-
-## 0.5 — Platform & Reach
-
-- [x] Implement local caching for offline viewing *(bills, bill detail/roll-calls, and the full delegation — including committees, contact info, funders, trading activity, and voting history — are cached on disk)*
-  - [x] Representatives icons
-  - [x] Bills
-  - [x] Representative information *(cached as part of the delegation in `RepresentativesStore`'s `DelegationCache`; survives offline relaunches since `refreshUsingCachedLocation` runs silently and leaves the cache untouched on failure)*
-  - [x] Voting histories *(`CongressService.enrichedProfile`/`SenateService.votingHistory` populate `Representative.keyVotes`, which is part of the same cached delegation)*
-- [x] Localization framework setup for multi-language support (Spanish, other languages most spoken in america, etc.) start with spanish
-  - [x] A complete spanish trnaslation in localizable
-  - [x] localized cf bundle display names
-
----
-
-## 0.6 — iOS integration
+- [ ] Some districts dont have representatives on file. theres one in california that I see, one in texas, one in florida. Do those districts truly not have a representative, or is that a glitch?
 
 - [x] Add home screen widgets that show what would be shown as the top bill in the recent bills feed
-  - [x] Expand the text vertically and horizontally. the text should take up more space in the widget
-  - [ ] This is broken. currently the text is larger than the actual widget. is it possible to detect the widget's bounds?
+  - [ ] This is broken ^ currently the text is larger than the actual widget. is it possible to detect the widget's bounds?
   - [ ] Center the progress text at the top of the widget
   - [x] When tapping on the widget, the user should automatically be sent to the bill that was displayed detail view, with a back button sending them to recent bills.
 - [x] Add system notifications for new bills being passed
@@ -132,15 +27,16 @@
 ---
 
 ## Version 1.0
-- [x] Organize the project's functions and file structure for maximum maintainability and understanding
-- [x] Modify ReadME
+ONLY DO THIS WHEN EVERYTHING ABOVE IS IMPLEMENTED
+- [ ] Organize the project's functions and file structure for maximum maintainability and understanding
+- [ ] Modify ReadME
 #### Release!
 
 
 ---
 
 ## Version 1.1 DO 
-NOT DO UNLESS EVERYTHING BEFORE 1.0 IS DONE
+DO NOT DO UNLESS EVERYTHING BEFORE 1.0 IS DONE
 
 - [ ] "Beats the market" quantitative metric — parse each PTR PDF into transactions (ticker, buy/sell, amount range, date) + pull historical prices to compute returns vs. a benchmark *(backend job: PDF parsing + a historical price data source; moved here from 0.3)*
 - [ ] Add information about if a senator beats the market. Pre calculate this and add this as a hard value in an update if there is no online source readily available
