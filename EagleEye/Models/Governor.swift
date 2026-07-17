@@ -16,12 +16,17 @@ struct Governor: Identifiable, Codable, Hashable {
     let party: Party
     /// Two-letter postal code, matching `MapBoundary.state`.
     let state: String
+    /// Official headshot, sourced from the National Governors Association's
+    /// governors directory (nga.org/governors). When `nil`, the UI falls
+    /// back to initials, same as `Representative.portraitURL`.
+    let portraitURL: URL?
 
-    init(id: UUID = UUID(), name: String, party: Party, state: String) {
+    init(id: UUID = UUID(), name: String, party: Party, state: String, portraitURL: URL? = nil) {
         self.id = id
         self.name = name
         self.party = party
         self.state = state
+        self.portraitURL = portraitURL
     }
 
     /// The state's full name, e.g. "California" for "CA".

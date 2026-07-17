@@ -3,13 +3,13 @@
 
 - [x] ADD GOVERNORS TO THE REPRESENTATIVES LIST (if there is a central list of governors to pull from so that we can fill all 50 states) (check if already done) (no big deal if unfeasible, but try)
   - [x] Instead of a Committees and bills section, just have a "Pills passed into law" section above the contact information. Find a source to pull recently enacted laws per state
-  - [~] Still have the money section for governors like we do representatives and fill it with top pac funders/top individual funders just like we do representatives
+  - [x] Still have the money section for governors like we do representatives and fill it with top pac funders/top individual funders just like we do representatives
     - [x] Add the "Top PAC Funders" / "Top Individual Funders" sections to the governor profile (mirroring `RepresentativeDetailView`), backed by a new `GovernorFunderDirectory` keyed by state — seeded empty for now since, unlike representatives' live OpenFEC lookup, there's no free API for gubernatorial campaign finance across all 50 states
-    - [~] Populate `GovernorFunderDirectory` with real, sourced top PAC/individual funder entries per state (hand-curated like `StateLawDirectory`, or wired to a verified state campaign-finance data source)
+    - [x] Populate `GovernorFunderDirectory` with real, sourced top PAC/individual funder entries per state (hand-curated like `StateLawDirectory`, or wired to a verified state campaign-finance data source)
       - [x] Add sourced PAC/individual funder entries for IL, MI, and FL (OpenSecrets / Transparency USA, 2022 races)
       - [x] Add sourced PAC/individual funder entries for TX, GA, and CO
       - [x] Add sourced PAC/individual funder entries for CA, NY, and OH, etc
-  - [ ] Pull governors headshots from the national governors association
+  - [x] Pull governors headshots from the national governors association
 
 - [ ] Build the interactive map view (evaluate performance and utility)
   - [ ] Add more information per district. Each district should display some basic information about the district, like the population count, top sectors/industry, top cities by population, top universties, and anything else relevant to the district. it should still show the representative. Feel free to split this into smaller tasks and add to-do list items under it. Right now the district detail section just shows the representative, but it should show more information

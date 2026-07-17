@@ -284,9 +284,8 @@ struct RepresentativePortrait: View {
     }
 }
 
-/// A governor's initials avatar with a party-color glow. There's no portrait
-/// source for governors (unlike `Representative`'s Congress.gov photos), so
-/// this is always the colored-initials placeholder.
+/// A governor's official NGA headshot, falling back to colored initials when
+/// no image is available. Mirrors `RepresentativePortrait`.
 struct GovernorPortrait: View {
     let governor: Governor
     let size: CGFloat
@@ -310,11 +309,18 @@ struct GovernorPortrait: View {
     }
 
     var body: some View {
-        ZStack {
-            Rectangle().fill(partyColor.gradient)
-            Text(initials)
-                .font(.system(size: size * 0.34, weight: .semibold))
-                .foregroundStyle(.white)
+        Group {
+            if let url = governor.portraitURL {
+                CachedAsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    placeholder
+                }
+            } else {
+                placeholder
+            }
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
@@ -327,6 +333,15 @@ struct GovernorPortrait: View {
             color: style == .shadow ? partyColor.opacity(0.7) : .clear,
             radius: style == .shadow ? size * 0.12 : 0
         )
+    }
+
+    private var placeholder: some View {
+        ZStack {
+            Rectangle().fill(partyColor.gradient)
+            Text(initials)
+                .font(.system(size: size * 0.34, weight: .semibold))
+                .foregroundStyle(.white)
+        }
     }
 }
 
