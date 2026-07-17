@@ -30,6 +30,10 @@ struct DistrictMapView: View {
     @State private var industryDirectory = DistrictIndustryDirectory()
     @State private var cityDirectory = DistrictCityDirectory()
     @State private var universityDirectory = DistrictUniversityDirectory()
+    @State private var statePopulationDirectory = StatePopulationDirectory()
+    @State private var stateIndustryDirectory = StateIndustryDirectory()
+    @State private var stateCityDirectory = StateCityDirectory()
+    @State private var stateUniversityDirectory = StateUniversityDirectory()
 
     /// The camera's current latitude span, updated continuously as the user
     /// pans/zooms — drives `stateLevelProgress` below.
@@ -236,7 +240,11 @@ struct DistrictMapView: View {
                 StateDetailSheet(
                     boundary: boundary,
                     senators: nationalSenateDirectory.senators(forState: boundary.state),
-                    representatives: nationalHouseDirectory.representatives(forState: boundary.state)
+                    representatives: nationalHouseDirectory.representatives(forState: boundary.state),
+                    populationDirectory: statePopulationDirectory,
+                    industryDirectory: stateIndustryDirectory,
+                    cityDirectory: stateCityDirectory,
+                    universityDirectory: stateUniversityDirectory
                 )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
@@ -612,19 +620,52 @@ private struct StateDetailSheet: View {
     let boundary: MapBoundary
     let senators: [Representative]
     let representatives: [Representative]
+    let populationDirectory: StatePopulationDirectory
+    let industryDirectory: StateIndustryDirectory
+    let cityDirectory: StateCityDirectory
+    let universityDirectory: StateUniversityDirectory
 
     private var governor: Governor? {
         GovernorDirectory.governor(forState: boundary.state)
     }
+
+    private var population: Int? {
+        populationDirectory.cachedPopulation(state: boundary.state)
+    }
+
+    private var topIndustries: [String]? {
+        industryDirectory.cachedTopIndustries(state: boundary.state)
+    }
+
+    private var topCities: [String]? {
+        cityDirectory.cachedTopCities(state: boundary.state)
+    }
+
+    private var topUniversities: [String]? {
+        universityDirectory.cachedTopUniversities(state: boundary.state)
+    }
+
+    private static let populationFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        return formatter
+    }()
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     HStack(alignment: .top, spacing: 16) {
-                        Text(MapBoundary.stateName(for: boundary.state))
-                            .font(.title2.bold())
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(MapBoundary.stateName(for: boundary.state))
+                                .font(.title2.bold())
+                            if let population {
+                                Text("Population: \(Self.populationFormatter.string(from: NSNumber(value: population)) ?? "\(population)")")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
                         StateFlagImage(state: boundary.state)
                             .frame(width: 90, height: 90)
@@ -633,6 +674,48 @@ private struct StateDetailSheet: View {
                                 DistrictOutlineShape(rings: boundary.rings)
                                     .stroke(.primary.opacity(0.85), lineWidth: 1.5)
                             )
+                    }
+                    .task {
+                        await populationDirectory.loadIfNeeded(state: boundary.state)
+                        await industryDirectory.loadIfNeeded(state: boundary.state)
+                        await cityDirectory.loadIfNeeded(state: boundary.state)
+                        await universityDirectory.loadIfNeeded(state: boundary.state)
+                    }
+
+                    if let topIndustries, !topIndustries.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Top Industries")
+                                .font(.subheadline.bold())
+                            ForEach(topIndustries, id: \.self) { industry in
+                                Text(industry)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+
+                    if let topCities, !topCities.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Top Cities")
+                                .font(.subheadline.bold())
+                            ForEach(topCities, id: \.self) { city in
+                                Text(city)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+
+                    if let topUniversities, !topUniversities.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Top Universities")
+                                .font(.subheadline.bold())
+                            ForEach(topUniversities, id: \.self) { university in
+                                Text(university)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
 
                     if let governor {

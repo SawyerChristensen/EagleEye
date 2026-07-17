@@ -17,16 +17,16 @@
     - [x] Show each district's top sectors/industries in the district detail sheet
     - [x] Show each district's top cities by population in the district detail sheet
     - [x] Show each district's top universities in the district detail sheet
-  - [~] Once a certain zoom level is reached, out to the state level, display the governors icons in the middle of the state. The state outline should be filled with the state flag instead of a single party color.
+  - [x] Once a certain zoom level is reached, out to the state level, display the governors icons in the middle of the state. The state outline should be filled with the state flag instead of a single party color.
     - [x] Add a `StateFlagDirectory` (postal code -> Wikimedia Commons flag image URL, resolved via `Special:FilePath` so no per-state upload hash is needed) and a `StateFlagImage` view that loads/caches it, mirroring `GovernorPortrait`
     - [x] Detect the map's zoom level and, once zoomed out to state level, swap each state polygon's fill from its district party-color tint to its `StateFlagImage` and show the state's governor (via `GovernorPortrait`) annotated at the state's centroid instead of per-district representative pins
     - [x] The transition between the different color coded district outlines and the state flag/state level representatives should be smooth
     - [x] Like the district information view, the state should show an outline of the state with the flag inside of it. this should also not be squashed and be recreated similar to how the mini district previews are rendered.
-    - [~] The state level information view should have information about the state, similar to what the districts have. total population, top sectors/industry, top cities by population, top universities, etc. this view should should show the governor on top, the two senators, and list of all house representatives in the state under the senators
+    - [x] The state level information view should have information about the state, similar to what the districts have. total population, top sectors/industry, top cities by population, top universities, etc. this view should should show the governor on top, the two senators, and list of all house representatives in the state under the senators
       - [x] Show the state's governor at the top of the state-level detail sheet (mirroring `GovernorRow`/`GovernorDetailView`)
       - [x] Show the state's two senators in the state-level detail sheet, below the governor
       - [x] Show a list of all House representatives for the state in the state-level detail sheet, below the senators
-      - [ ] Add total population, top sectors/industries, top cities, and top universities sections to the state-level detail sheet (new state-keyed data directories, mirroring the district ones)
+      - [x] Add total population, top sectors/industries, top cities, and top universities sections to the state-level detail sheet (new state-keyed data directories, mirroring the district ones)
 
 - [ ] In the voting history for an enacted law, I only see how my house of representatives representative voted. I want to see how my senators voted as well, but their votes dont show up (at least in the same section as my representatives vote shows up). I want to see my senators vote in the same spot
 - [ ] Improve the general performance of the map. Improve the fps, and maybe fix artifacts like the black overlay on the rest of the world having to fill in when the user zooms out fast. currently it only seems to take up the part of the screen the user is looking at
