@@ -11,8 +11,12 @@
       - [x] Add sourced PAC/individual funder entries for CA, NY, and OH, etc
   - [x] Pull governors headshots from the national governors association
 
-- [ ] Build the interactive map view (evaluate performance and utility)
-  - [ ] Add more information per district. Each district should display some basic information about the district, like the population count, top sectors/industry, top cities by population, top universties, and anything else relevant to the district. it should still show the representative. Feel free to split this into smaller tasks and add to-do list items under it. Right now the district detail section just shows the representative, but it should show more information
+- [~] Build the interactive map view (evaluate performance and utility)
+  - [~] Add more information per district. Each district should display some basic information about the district, like the population count, top sectors/industry, top cities by population, top universties, and anything else relevant to the district. it should still show the representative. Feel free to split this into smaller tasks and add to-do list items under it. Right now the district detail section just shows the representative, but it should show more information
+    - [x] Show each district's total population (Census ACS estimate) in the district detail sheet
+    - [ ] Show each district's top sectors/industries in the district detail sheet
+    - [ ] Show each district's top cities by population in the district detail sheet
+    - [ ] Show each district's top universities in the district detail sheet
   - [ ] Once a certain zoom level is reached, out to the state level, display the governors icons in the middle of the state. The state outline should be filled with the state flag instead of a single party color.
     - [ ] The transition between the different color coded district outlines and the state flag/state level representatives should be smooth
     - [ ] Like the district information view, the state should show an outline of the state with the flag inside of it. this should also not be squashed and be recreated similar to how the mini district previews are rendered.

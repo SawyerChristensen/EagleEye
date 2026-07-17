@@ -24,6 +24,7 @@ struct DistrictMapView: View {
     @State private var isCenteredOnUserDistrict = false
     @State private var worldMask: MKPolygon?
     @State private var nationalHouseDirectory = NationalHouseDirectory()
+    @State private var populationDirectory = DistrictPopulationDirectory()
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -131,7 +132,8 @@ struct DistrictMapView: View {
                 DistrictDetailSheet(
                     boundary: boundary,
                     color: fillColor(for: boundary),
-                    representative: representative(for: boundary)
+                    representative: representative(for: boundary),
+                    populationDirectory: populationDirectory
                 )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
@@ -318,19 +320,40 @@ private struct DistrictDetailSheet: View {
     let boundary: MapBoundary
     let color: Color
     let representative: Representative?
+    let populationDirectory: DistrictPopulationDirectory
+
+    private var population: Int? {
+        populationDirectory.cachedPopulation(state: boundary.state, district: boundary.district ?? 0)
+    }
+
+    private static let populationFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        return formatter
+    }()
 
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 20) {
                 HStack(alignment: .top, spacing: 16) {
-                    Text(boundary.displayName)
-                        .font(.title2.bold())
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(boundary.displayName)
+                            .font(.title2.bold())
+                        if let population {
+                            Text("Population: \(Self.populationFormatter.string(from: NSNumber(value: population)) ?? "\(population)")")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                     DistrictOutlineShape(rings: boundary.rings)
                         .fill(color.opacity(0.3))
                         .overlay(DistrictOutlineShape(rings: boundary.rings).stroke(color, lineWidth: 1.5))
                         .frame(width: 80, height: 80)
+                }
+                .task {
+                    await populationDirectory.loadIfNeeded(state: boundary.state, district: boundary.district ?? 0)
                 }
 
                 Divider()
