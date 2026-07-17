@@ -24,6 +24,13 @@ struct DistrictMapView: View {
     @State private var hasCenteredOnUserDistrict = false
     @State private var isCenteredOnUserDistrict = false
     @State private var worldMask: MKPolygon?
+    /// `partyByDistrict`, rebuilt only when the underlying roster actually
+    /// changes rather than on every access — see that property for why.
+    @State private var partyByDistrictCache: [String: Party] = [:]
+    /// `mapUnitSpan(for:)`, precomputed once per state boundary when
+    /// `stateBoundaries` loads (the geometry is static) rather than
+    /// recomputed on every frame of the state-level crossfade.
+    @State private var mapUnitSpanCache: [String: (width: Double, height: Double)] = [:]
     @State private var nationalHouseDirectory = NationalHouseDirectory()
     @State private var nationalSenateDirectory = NationalSenateDirectory()
     @State private var populationDirectory = DistrictPopulationDirectory()
@@ -78,9 +85,17 @@ struct DistrictMapView: View {
 
     /// Every House member nationwide, keyed by state and district — used to
     /// tint every district's fill and to answer "who represents this
-    /// district" for a tapped district, not just the user's own.
-    private var partyByDistrict: [String: Party] {
-        Dictionary(
+    /// district" for a tapped district, not just the user's own. Backed by
+    /// `partyByDistrictCache`, rebuilt only when the roster changes: this is
+    /// read once per district per render (~435 districts), and with
+    /// `.onMapCameraChange(frequency: .continuous)` re-evaluating the view
+    /// body on every gesture frame, rebuilding a fresh dictionary from all
+    /// ~435 members on every read made this effectively O(n²) main-thread
+    /// work during every pan/zoom frame.
+    private var partyByDistrict: [String: Party] { partyByDistrictCache }
+
+    private func rebuildPartyByDistrictCache() {
+        partyByDistrictCache = Dictionary(
             nationalHouseDirectory.members.map { (districtKey(state: $0.state, district: $0.district), $0.party) },
             uniquingKeysWith: { first, _ in first }
         )
@@ -181,6 +196,9 @@ struct DistrictMapView: View {
                     visibleLatitudeSpan = context.region.span.latitudeDelta
                     visibleMapRect = context.rect
                 }
+                .onChange(of: nationalHouseDirectory.members) { _, _ in
+                    rebuildPartyByDistrictCache()
+                }
                 .onChange(of: stateLevelProgress > 0) { _, enteredStateLevelBand in
                     // Start loading flags as soon as the crossfade band is
                     // entered, not just once fully at state level, so images
@@ -217,10 +235,14 @@ struct DistrictMapView: View {
                     districtBoundaries = await districts
                     stateBoundaries = await states
                     worldMask = Self.buildWorldMask(from: stateBoundaries)
+                    mapUnitSpanCache = Dictionary(
+                        uniqueKeysWithValues: stateBoundaries.map { ($0.id, Self.computeMapUnitSpan(for: $0)) }
+                    )
                     centerOnUserDistrictIfNeeded()
                 }
                 await nationalHouseLoad
                 await nationalSenateLoad
+                rebuildPartyByDistrictCache()
             }
             .onChange(of: representatives) { centerOnUserDistrictIfNeeded() }
             .sheet(item: $selectedDistrict) { boundary in
@@ -255,6 +277,17 @@ struct DistrictMapView: View {
     /// A world-covering polygon with every state/territory boundary punched
     /// out as a hole, so filling it grey tints everything outside the US
     /// without touching the country's own territory.
+    ///
+    /// The mask is a wash the user never inspects closely — its holes don't
+    /// need to be stroked or hit-tested like the interactive state/district
+    /// polygons do — so an extra, coarser simplification pass on top of
+    /// `BoundaryLoader`'s standard tolerance keeps the path MapKit has to
+    /// rasterize per tile far cheaper without any visible loss of shape.
+    /// That path complexity is what made the mask visibly lag behind (read
+    /// as a "black overlay" catching up) on a fast pinch-zoom-out, since
+    /// MapKit has to re-fill many newly exposed tiles at once.
+    private static let worldMaskSimplificationTolerance = 0.01 // degrees, ≈1.1km
+
     private static func buildWorldMask(from states: [MapBoundary]) -> MKPolygon? {
         guard !states.isEmpty else { return nil }
         // Longitude -180 and +180 are the same meridian, so a rectangle whose
@@ -276,6 +309,8 @@ struct DistrictMapView: View {
             CLLocationCoordinate2D(latitude: -85, longitude: -180),
         ]
         let holes = states.flatMap { $0.rings }.map { ring in
+            BoundaryLoader.simplify(ring, tolerance: worldMaskSimplificationTolerance)
+        }.map { ring in
             MKPolygon(coordinates: ring, count: ring.count)
         }
         return MKPolygon(coordinates: world, count: world.count, interiorPolygons: holes)
@@ -325,7 +360,15 @@ struct DistrictMapView: View {
     /// A boundary's extent in Mercator "map point" units (width, height) —
     /// combined with `screenPointsPerMapUnit`, this gives the on-screen size
     /// of a state's polygon so its flag fill can be scaled to cover it.
+    /// A state's geometry never changes, so this is precomputed once into
+    /// `mapUnitSpanCache` when `stateBoundaries` loads rather than
+    /// recomputed (by scanning every coordinate) on every frame of the
+    /// state-level crossfade.
     private func mapUnitSpan(for boundary: MapBoundary) -> (width: Double, height: Double) {
+        mapUnitSpanCache[boundary.id] ?? Self.computeMapUnitSpan(for: boundary)
+    }
+
+    private static func computeMapUnitSpan(for boundary: MapBoundary) -> (width: Double, height: Double) {
         let points = boundary.rings.flatMap { $0 }.map { MKMapPoint($0) }
         guard let minX = points.map(\.x).min(), let maxX = points.map(\.x).max(),
               let minY = points.map(\.y).min(), let maxY = points.map(\.y).max()

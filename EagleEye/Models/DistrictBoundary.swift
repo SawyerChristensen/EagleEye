@@ -217,7 +217,11 @@ enum BoundaryLoader {
     /// Reduces a ring's vertex count with the Douglas-Peucker algorithm,
     /// dropping points that fall within `tolerance` (in degrees) of the
     /// line between their neighbors while preserving the ring's shape.
-    private static func simplify(_ points: [CLLocationCoordinate2D], tolerance: Double) -> [CLLocationCoordinate2D] {
+    /// Exposed (not `private`) so callers needing an even coarser pass — e.g.
+    /// the map's world-mask cutouts, which are just a wash and never stroked
+    /// or hit-tested — can re-simplify already-loaded rings on top of the
+    /// standard tolerance applied at load time.
+    static func simplify(_ points: [CLLocationCoordinate2D], tolerance: Double) -> [CLLocationCoordinate2D] {
         guard points.count > 2 else { return points }
         var keep = [Bool](repeating: false, count: points.count)
         keep[0] = true
