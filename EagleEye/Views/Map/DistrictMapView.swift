@@ -19,6 +19,7 @@ struct DistrictMapView: View {
     @State private var stateBoundaries: [MapBoundary] = []
     @State private var districtBoundaries: [MapBoundary] = []
     @State private var selectedDistrict: MapBoundary?
+    @State private var selectedState: MapBoundary?
     @State private var hasSetInitialRegion = false
     @State private var hasCenteredOnUserDistrict = false
     @State private var isCenteredOnUserDistrict = false
@@ -158,7 +159,14 @@ struct DistrictMapView: View {
                 }
                 .onTapGesture { screenPoint in
                     guard let coordinate = proxy.convert(screenPoint, from: .local) else { return }
-                    selectedDistrict = districtBoundaries.first { $0.contains(coordinate) }
+                    // Past the midpoint of the crossfade, districts are already
+                    // faded out and states read as the tappable layer — so route
+                    // the tap to whichever layer is actually legible right now.
+                    if stateLevelProgress > 0.5 {
+                        selectedState = stateBoundaries.first { $0.contains(coordinate) }
+                    } else {
+                        selectedDistrict = districtBoundaries.first { $0.contains(coordinate) }
+                    }
                 }
                 .onGeometryChange(for: CGSize.self, of: \.size) { mapViewSize = $0 }
                 .onMapCameraChange(frequency: .onEnd) { context in
@@ -220,6 +228,11 @@ struct DistrictMapView: View {
                 )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+            }
+            .sheet(item: $selectedState) { boundary in
+                StateDetailSheet(boundary: boundary)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
         }
     }
@@ -579,6 +592,39 @@ private struct DistrictDetailSheet: View {
             .navigationDestination(for: Representative.self) { rep in
                 RepresentativeDetailView(representative: rep)
             }
+        }
+    }
+}
+
+/// The sheet shown when a state is tapped at state-level zoom: its name
+/// beside a copy of its outline filled with its flag. Mirrors
+/// `DistrictDetailSheet`'s outline thumbnail — scaled to fit without
+/// squashing, via the same `DistrictOutlineShape` used for districts — so
+/// the two sheets read as one consistent design at either zoom level.
+private struct StateDetailSheet: View {
+    let boundary: MapBoundary
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 20) {
+                HStack(alignment: .top, spacing: 16) {
+                    Text(MapBoundary.stateName(for: boundary.state))
+                        .font(.title2.bold())
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    StateFlagImage(state: boundary.state)
+                        .frame(width: 90, height: 90)
+                        .clipShape(DistrictOutlineShape(rings: boundary.rings))
+                        .overlay(
+                            DistrictOutlineShape(rings: boundary.rings)
+                                .stroke(.primary.opacity(0.85), lineWidth: 1.5)
+                        )
+                }
+
+                Spacer()
+            }
+            .padding()
+            .padding(.top, 16)
         }
     }
 }
