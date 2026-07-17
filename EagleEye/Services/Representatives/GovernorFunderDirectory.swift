@@ -29,6 +29,12 @@ enum GovernorFunderDirectory {
         GovernorFunder(state: "TX", funder: Funder(name: "Texans for Lawsuit Reform PAC", amount: 100_000, category: "Legal Reform")),
         GovernorFunder(state: "GA", funder: Funder(name: "Republican Governors Association", amount: 9_000_000, category: "Party Committee")),
         GovernorFunder(state: "CO", funder: Funder(name: "Democratic Governors Association", amount: 1_500_000, category: "Party Committee")),
+        GovernorFunder(state: "CA", funder: Funder(name: "Agua Caliente Band of Cahuilla Indians", amount: 64_800, category: "Tribal Gaming")),
+        GovernorFunder(state: "CA", funder: Funder(name: "California Nurses Association PAC", amount: 64_800, category: "Labor Unions")),
+        GovernorFunder(state: "NY", funder: Funder(name: "Hotel Trades Council PAC", amount: 139_400, category: "Labor Unions")),
+        GovernorFunder(state: "NY", funder: Funder(name: "LAWPAC (New York State Trial Lawyers Association)", amount: 68_700, category: "Legal")),
+        GovernorFunder(state: "OH", funder: Funder(name: "Ohio Republican State Central & Executive Committee State Candidate Fund", amount: 1_959_075, category: "Party Committee")),
+        GovernorFunder(state: "OH", funder: Funder(name: "Ohio Republican PAC", amount: 520_784, category: "Party Committee")),
     ]
 
     /// Top individual contributors (totaled by employer or occupation),
@@ -43,6 +49,12 @@ enum GovernorFunderDirectory {
         GovernorFunder(state: "TX", funder: Funder(name: "Kelcy Warren", amount: 1_000_000, category: "Energy")),
         GovernorFunder(state: "GA", funder: Funder(name: "Timothy Mellon", amount: 5_000_000, category: "Transportation")),
         GovernorFunder(state: "CO", funder: Funder(name: "Jared Polis (self-funded)", amount: 12_600_000, category: "Self-Funded")),
+        GovernorFunder(state: "CA", funder: Funder(name: "Akiko Yamazaki", amount: 64_800, category: "Philanthropy")),
+        GovernorFunder(state: "CA", funder: Funder(name: "Angelo K. Tsakopoulos", amount: 64_800, category: "Real Estate")),
+        GovernorFunder(state: "NY", funder: Funder(name: "Rudin Family", amount: 226_000, category: "Real Estate")),
+        GovernorFunder(state: "NY", funder: Funder(name: "Jeff and Lisa Blau (Related Companies)", amount: 139_400, category: "Real Estate")),
+        GovernorFunder(state: "OH", funder: Funder(name: "Eric Wagenbrenner", amount: 35_650, category: "Real Estate")),
+        GovernorFunder(state: "OH", funder: Funder(name: "George A. Skestos", amount: 30_608, category: "Real Estate")),
     ]
 
     /// The PAC funders on record for the given state.

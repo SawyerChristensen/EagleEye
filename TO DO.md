@@ -8,7 +8,7 @@
     - [~] Populate `GovernorFunderDirectory` with real, sourced top PAC/individual funder entries per state (hand-curated like `StateLawDirectory`, or wired to a verified state campaign-finance data source)
       - [x] Add sourced PAC/individual funder entries for IL, MI, and FL (OpenSecrets / Transparency USA, 2022 races)
       - [x] Add sourced PAC/individual funder entries for TX, GA, and CO
-      - [ ] Add sourced PAC/individual funder entries for CA, NY, and OH, etc
+      - [x] Add sourced PAC/individual funder entries for CA, NY, and OH, etc
   - [ ] Pull governors headshots from the national governors association
 
 - [ ] Build the interactive map view (evaluate performance and utility)
