@@ -23,6 +23,8 @@ struct GovernorDetailView: View {
     }
 
     private var laws: [StateLaw] { StateLawDirectory.laws(forState: governor.state) }
+    private var pacFunders: [Funder] { GovernorFunderDirectory.pacFunders(forState: governor.state) }
+    private var individualFunders: [Funder] { GovernorFunderDirectory.individualFunders(forState: governor.state) }
 
     var body: some View {
         ScrollView {
@@ -41,6 +43,8 @@ struct GovernorDetailView: View {
                 .frame(maxWidth: .infinity)
 
                 lawsPassedSection
+                pacFundersSection
+                individualFundersSection
             }
             .padding()
         }
@@ -71,6 +75,84 @@ struct GovernorDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 14))
+    }
+
+    /// Top PAC contributors to this governor's campaign, mirroring
+    /// `RepresentativeDetailView`'s equivalent section.
+    private var pacFundersSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Top PAC Funders", systemImage: "dollarsign.circle")
+                .font(.headline)
+
+            if pacFunders.isEmpty {
+                Text("Funding data unavailable.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(pacFunders, id: \.self) { funder in
+                        GovernorFunderRow(funder: funder)
+                    }
+                    Text("Direct contributions from each organization's political action committee (PAC).")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .padding(.top, 2)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 14))
+    }
+
+    /// Top individual contributors, grouped by employer or occupation.
+    private var individualFundersSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Top Individual Funders", systemImage: "person.2")
+                .font(.headline)
+
+            if individualFunders.isEmpty {
+                Text("Individual contributor data unavailable.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(individualFunders, id: \.self) { funder in
+                        GovernorFunderRow(funder: funder)
+                    }
+                    Text("Individual donations totaled by the employer or occupation each contributor reported.")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .padding(.top, 2)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 14))
+    }
+}
+
+/// A single funder's name, category, and contribution total.
+private struct GovernorFunderRow: View {
+    let funder: Funder
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(funder.name)
+                    .font(.subheadline)
+                if !funder.category.isEmpty {
+                    Text(funder.category)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Text(funder.amount, format: .currency(code: "USD").precision(.fractionLength(0)))
+                .font(.subheadline.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
