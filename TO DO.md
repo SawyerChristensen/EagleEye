@@ -16,7 +16,7 @@
     - [x] Show each district's total population (Census ACS estimate) in the district detail sheet
     - [x] Show each district's top sectors/industries in the district detail sheet
     - [x] Show each district's top cities by population in the district detail sheet
-    - [ ] Show each district's top universities in the district detail sheet
+    - [x] Show each district's top universities in the district detail sheet
   - [ ] Once a certain zoom level is reached, out to the state level, display the governors icons in the middle of the state. The state outline should be filled with the state flag instead of a single party color.
     - [ ] The transition between the different color coded district outlines and the state flag/state level representatives should be smooth
     - [ ] Like the district information view, the state should show an outline of the state with the flag inside of it. this should also not be squashed and be recreated similar to how the mini district previews are rendered.

@@ -27,6 +27,7 @@ struct DistrictMapView: View {
     @State private var populationDirectory = DistrictPopulationDirectory()
     @State private var industryDirectory = DistrictIndustryDirectory()
     @State private var cityDirectory = DistrictCityDirectory()
+    @State private var universityDirectory = DistrictUniversityDirectory()
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -137,7 +138,8 @@ struct DistrictMapView: View {
                     representative: representative(for: boundary),
                     populationDirectory: populationDirectory,
                     industryDirectory: industryDirectory,
-                    cityDirectory: cityDirectory
+                    cityDirectory: cityDirectory,
+                    universityDirectory: universityDirectory
                 )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
@@ -327,6 +329,7 @@ private struct DistrictDetailSheet: View {
     let populationDirectory: DistrictPopulationDirectory
     let industryDirectory: DistrictIndustryDirectory
     let cityDirectory: DistrictCityDirectory
+    let universityDirectory: DistrictUniversityDirectory
 
     private var population: Int? {
         populationDirectory.cachedPopulation(state: boundary.state, district: boundary.district ?? 0)
@@ -338,6 +341,10 @@ private struct DistrictDetailSheet: View {
 
     private var topCities: [String]? {
         cityDirectory.cachedTopCities(state: boundary.state, district: boundary.district ?? 0)
+    }
+
+    private var topUniversities: [String]? {
+        universityDirectory.cachedTopUniversities(state: boundary.state, district: boundary.district ?? 0)
     }
 
     private static let populationFormatter: NumberFormatter = {
@@ -370,6 +377,7 @@ private struct DistrictDetailSheet: View {
                     await populationDirectory.loadIfNeeded(state: boundary.state, district: boundary.district ?? 0)
                     await industryDirectory.loadIfNeeded(state: boundary.state, district: boundary.district ?? 0)
                     await cityDirectory.loadIfNeeded(boundary: boundary)
+                    await universityDirectory.loadIfNeeded(boundary: boundary)
                 }
 
                 if let topIndustries, !topIndustries.isEmpty {
@@ -390,6 +398,18 @@ private struct DistrictDetailSheet: View {
                             .font(.subheadline.bold())
                         ForEach(topCities, id: \.self) { city in
                             Text(city)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                if let topUniversities, !topUniversities.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Top Universities")
+                            .font(.subheadline.bold())
+                        ForEach(topUniversities, id: \.self) { university in
+                            Text(university)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
