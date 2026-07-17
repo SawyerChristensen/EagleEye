@@ -604,6 +604,10 @@ private struct DistrictDetailSheet: View {
 private struct StateDetailSheet: View {
     let boundary: MapBoundary
 
+    private var governor: Governor? {
+        GovernorDirectory.governor(forState: boundary.state)
+    }
+
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 20) {
@@ -621,10 +625,22 @@ private struct StateDetailSheet: View {
                         )
                 }
 
+                if let governor {
+                    Divider()
+
+                    NavigationLink(value: governor) {
+                        GovernorRow(governor: governor)
+                    }
+                    .buttonStyle(.plain)
+                }
+
                 Spacer()
             }
             .padding()
             .padding(.top, 16)
+            .navigationDestination(for: Governor.self) { governor in
+                GovernorDetailView(governor: governor)
+            }
         }
     }
 }
