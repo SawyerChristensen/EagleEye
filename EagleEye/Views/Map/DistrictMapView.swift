@@ -24,6 +24,19 @@ struct DistrictMapView: View {
     @State private var hasCenteredOnUserDistrict = false
     @State private var isCenteredOnUserDistrict = false
     @State private var worldMask: MKPolygon?
+    /// Keeps the camera from panning/zooming out to the rest of the globe —
+    /// every district, state, and territory this app tracks (CONUS, Alaska,
+    /// Hawaii, Puerto Rico, DC) sits within this box, so there's no reason to
+    /// spend tile-loading and rendering budget past it. A single rectangle
+    /// can't exclude next-door Canada/Mexico without also cutting off AK/HI/PR,
+    /// but it does rule out the rest of the world, which is the actual cost.
+    private static let cameraBounds = MapCameraBounds(
+        centerCoordinateBounds: MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 45, longitude: -122),
+            span: MKCoordinateSpan(latitudeDelta: 62, longitudeDelta: 118)
+        ),
+        maximumDistance: 12_000_000
+    )
     /// `partyByDistrict`, rebuilt only when the underlying roster actually
     /// changes rather than on every access — see that property for why.
     @State private var partyByDistrictCache: [String: Party] = [:]
@@ -104,17 +117,13 @@ struct DistrictMapView: View {
     var body: some View {
         NavigationStack {
             MapReader { proxy in
-                Map(position: $position) {
-                    if let worldMask {
-                        MapPolygon(worldMask)
-                            .foregroundStyle(.black.opacity(0.2))
-                            // MapKit has no API to hide physical-feature labels
-                            // ("Rocky Mountains", etc.) on the standard basemap.
-                            // Drawing the overlays *above* the label layer (they
-                            // default to `.aboveRoads`, below labels) lets the
-                            // fill wash paint over that text and suppress it.
-                            .mapOverlayLevel(level: .aboveLabels)
-                    }
+                // Both crossfade layers (state and district) are built by
+                // dedicated @MapContentBuilder properties below, rather than
+                // inlined here, because folding this many conditional
+                // ForEach/Annotation branches into one big builder expression
+                // made the type checker time out.
+                Map(position: $position, bounds: Self.cameraBounds) {
+                    worldMaskLayer
 
                     // Both layers render across the crossfade band (rather than
                     // an `if/else` toggle) so the swap between district fills
@@ -125,50 +134,14 @@ struct DistrictMapView: View {
                     // invisible content at rest.
                     let progress = stateLevelProgress
                     if progress > 0 {
-                        ForEach(stateBoundaries) { boundary in
-                            ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
-                                MapPolygon(coordinates: closed(ring))
-                                    .foregroundStyle(stateFillStyle(for: boundary, progress: progress))
-                                    .stroke(.primary.opacity(0.85 * progress), lineWidth: 2)
-                                    .mapOverlayLevel(level: .aboveLabels)
-                            }
-                        }
-
-                        ForEach(stateBoundaries) { boundary in
-                            if let governor = GovernorDirectory.governor(forState: boundary.state) {
-                                Annotation(governor.name, coordinate: boundary.centroid) {
-                                    GovernorPortrait(governor: governor, size: 40, style: .outline)
-                                        .opacity(progress)
-                                }
-                            }
-                        }
+                        stateFillLayer(progress: progress)
+                        governorAnnotationLayer(progress: progress)
                     }
 
                     if progress < 1 {
-                        ForEach(districtBoundaries) { boundary in
-                            ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
-                                MapPolygon(coordinates: closed(ring))
-                                    .foregroundStyle(fillColor(for: boundary).opacity(0.4 * (1 - progress)))
-                                    .stroke(.secondary.opacity(0.5 * (1 - progress)), lineWidth: 1)
-                                    .mapOverlayLevel(level: .aboveLabels)
-                            }
-                        }
-
-                        ForEach(stateBoundaries) { boundary in
-                            ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
-                                MapPolyline(coordinates: closed(ring))
-                                    .stroke(.primary.opacity(0.85 * (1 - progress)), lineWidth: 2)
-                            }
-                        }
-
-                        ForEach(mappable) { rep in
-                            if let coordinate = districtCenter(for: rep) {
-                                Annotation(rep.name, coordinate: coordinate) {
-                                    RepresentativePortrait(representative: rep, size: 40, style: .outline)
-                                        .opacity(1 - progress)
-                                }
-                            }
-                        }
+                        districtFillLayer(progress: progress)
+                        stateOutlineLayer(progress: progress)
+                        representativeAnnotationLayer(progress: progress)
                     }
 
                     UserAnnotation()
@@ -320,6 +293,96 @@ struct DistrictMapView: View {
     private func closed(_ ring: [CLLocationCoordinate2D]) -> [CLLocationCoordinate2D] {
         guard let first = ring.first else { return ring }
         return ring + [first]
+    }
+
+    /// Extracted out of `body` — inlining this (and `districtFillPolygon`)
+    /// directly in the `MapContentBuilder` chain made the surrounding
+    /// expression too complex for the type checker to solve in reasonable
+    /// time.
+    private func stateFillPolygon(for boundary: MapBoundary, ring: [CLLocationCoordinate2D], progress: Double) -> some MapContent {
+        MapPolygon(coordinates: closed(ring))
+            .foregroundStyle(stateFillStyle(for: boundary, progress: progress))
+            .stroke(.primary.opacity(0.85 * progress), lineWidth: 2)
+            .mapOverlayLevel(level: .aboveLabels)
+    }
+
+    /// See `stateFillPolygon` — same type-checker-complexity reason.
+    private func districtFillPolygon(for boundary: MapBoundary, ring: [CLLocationCoordinate2D], progress: Double) -> some MapContent {
+        MapPolygon(coordinates: closed(ring))
+            .foregroundStyle(fillColor(for: boundary).opacity(0.4 * (1 - progress)))
+            .stroke(.secondary.opacity(0.5 * (1 - progress)), lineWidth: 1)
+            .mapOverlayLevel(level: .aboveLabels)
+    }
+
+    /// The remaining `Map` layers, each pulled into its own
+    /// `@MapContentBuilder` property/function for the same reason as
+    /// `stateFillPolygon`/`districtFillPolygon` above: keeping `body`'s own
+    /// `Map { ... }` closure shallow is what keeps the whole view
+    /// type-checkable in reasonable time.
+    @MapContentBuilder
+    private var worldMaskLayer: some MapContent {
+        if let worldMask {
+            MapPolygon(worldMask)
+                .foregroundStyle(.black.opacity(0.2))
+                // MapKit has no API to hide physical-feature labels
+                // ("Rocky Mountains", etc.) on the standard basemap.
+                // Drawing the overlays *above* the label layer (they
+                // default to `.aboveRoads`, below labels) lets the
+                // fill wash paint over that text and suppress it.
+                .mapOverlayLevel(level: .aboveLabels)
+        }
+    }
+
+    @MapContentBuilder
+    private func stateFillLayer(progress: Double) -> some MapContent {
+        ForEach(stateBoundaries) { boundary in
+            ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
+                stateFillPolygon(for: boundary, ring: ring, progress: progress)
+            }
+        }
+    }
+
+    @MapContentBuilder
+    private func governorAnnotationLayer(progress: Double) -> some MapContent {
+        ForEach(stateBoundaries) { boundary in
+            if let governor = GovernorDirectory.governor(forState: boundary.state) {
+                Annotation(governor.name, coordinate: boundary.centroid) {
+                    GovernorPortrait(governor: governor, size: 40, style: .outline)
+                        .opacity(progress)
+                }
+            }
+        }
+    }
+
+    @MapContentBuilder
+    private func districtFillLayer(progress: Double) -> some MapContent {
+        ForEach(districtBoundaries) { boundary in
+            ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
+                districtFillPolygon(for: boundary, ring: ring, progress: progress)
+            }
+        }
+    }
+
+    @MapContentBuilder
+    private func stateOutlineLayer(progress: Double) -> some MapContent {
+        ForEach(stateBoundaries) { boundary in
+            ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
+                MapPolyline(coordinates: closed(ring))
+                    .stroke(.primary.opacity(0.85 * (1 - progress)), lineWidth: 2)
+            }
+        }
+    }
+
+    @MapContentBuilder
+    private func representativeAnnotationLayer(progress: Double) -> some MapContent {
+        ForEach(mappable) { rep in
+            if let coordinate = districtCenter(for: rep) {
+                Annotation(rep.name, coordinate: coordinate) {
+                    RepresentativePortrait(representative: rep, size: 40, style: .outline)
+                        .opacity(1 - progress)
+                }
+            }
+        }
     }
 
     /// A lookup key combining state and district number; at-large districts

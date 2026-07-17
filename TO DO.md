@@ -27,11 +27,18 @@
       - [x] Show the state's two senators in the state-level detail sheet, below the governor
       - [x] Show a list of all House representatives for the state in the state-level detail sheet, below the senators
       - [x] Add total population, top sectors/industries, top cities, and top universities sections to the state-level detail sheet (new state-keyed data directories, mirroring the district ones)
-  - [ ] We currently dont need to see the rest of the world in our map. Is there a way to just load a map of america? Would that be better for performance? We should just spend computational energy rendering America
+  - [x] We currently dont need to see the rest of the world in our map. Is there a way to just load a map of america? Would that be better for performance? We should just spend computational energy rendering America
   - [x] Improve the general performance of the map. Improve the fps, and maybe fix artifacts like the black overlay on the rest of the world having to fill in when the user zooms out fast. currently it only seems to take up the part of the screen the user is looking at
+  - [ ] When the governor’s images are being loaded on the map, sometimes the wrong images go to the wrong governors. My governor correctly loaded once, I looked elsewhere, and my governors icon went to that other state for some reason and was removed from mine. How we display governor icons does not seem right. My normal representatives icons are also not loading now
+  - [ ] Change the distance we transition to the state level higher in the zoom level. We should have to zoom out further for the the district-state difference to be seen. Also, the transition should happen faster
+  - [ ] Some districts dont have representatives on file. theres one in california that I see, one in texas, one in florida. Do those districts truly not have a representative, or is that a glitch?
 
 - [x] In the voting history for an enacted law, I only see how my house of representatives representative voted. I want to see how my senators voted as well, but their votes dont show up (at least in the same section as my representatives vote shows up). I want to see my senators vote in the same spot
-- [ ] Some districts dont have representatives on file. theres one in california that I see, one in texas, one in florida. Do those districts truly not have a representative, or is that a glitch?
+
+The representatives list takes forever to load. Lets step what we display and display information immediately in the following order:
+1. The name of the representatives as we receive them
+2. The icons of the representatives as they load
+3. Load all their about/voting history etc information in the background so that when we tap on them it’s already loaded. Note that this should not be required for them to show up in the list in the first place. This can be loaded in the background while they are at least in the list
 
 - [x] Add home screen widgets that show what would be shown as the top bill in the recent bills feed
   - [ ] This is broken ^ currently the text is larger than the actual widget. is it possible to detect the widget's bounds?
