@@ -29,7 +29,27 @@ struct DistrictMapView: View {
     @State private var cityDirectory = DistrictCityDirectory()
     @State private var universityDirectory = DistrictUniversityDirectory()
 
+    /// Whether the camera is currently zoomed out far enough to treat this
+    /// as a "state level" view: district fills/pins swap for flag-filled
+    /// states with a governor pin apiece.
+    @State private var isStateLevel = false
+    @State private var stateFlagImages: [String: Image] = [:]
+    @State private var stateFlagPixelSizes: [String: CGSize] = [:]
+    @State private var loadingFlagStates: Set<String> = []
+    /// The map view's own rendered size and the Mercator "map rect" it's
+    /// currently showing — together these convert a boundary's extent into
+    /// on-screen points, so a state's flag fill can be sized to actually
+    /// cover its polygon. See `screenPointsPerMapUnit`.
+    @State private var mapViewSize: CGSize = .zero
+    @State private var visibleMapRect: MKMapRect = .world
+
     @Environment(\.colorScheme) private var colorScheme
+
+    /// Once the visible region spans at least this many degrees of
+    /// latitude, individual districts are too small to read — the map
+    /// treats this as "state level" and swaps district fills/pins for
+    /// flag-filled states with governor pins.
+    private static let stateLevelSpanThreshold: Double = 6.0
 
     /// Members to show as pins. Senators are excluded for now — they represent
     /// a whole state rather than a single district, so they have no "middle of
@@ -63,26 +83,45 @@ struct DistrictMapView: View {
                             .mapOverlayLevel(level: .aboveLabels)
                     }
 
-                    ForEach(districtBoundaries) { boundary in
-                        ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
-                            MapPolygon(coordinates: closed(ring))
-                                .foregroundStyle(fillColor(for: boundary).opacity(0.4))
-                                .stroke(.secondary.opacity(0.5), lineWidth: 1)
-                                .mapOverlayLevel(level: .aboveLabels)
+                    if isStateLevel {
+                        ForEach(stateBoundaries) { boundary in
+                            ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
+                                MapPolygon(coordinates: closed(ring))
+                                    .foregroundStyle(stateFillStyle(for: boundary))
+                                    .stroke(.primary.opacity(0.85), lineWidth: 2)
+                                    .mapOverlayLevel(level: .aboveLabels)
+                            }
                         }
-                    }
 
-                    ForEach(stateBoundaries) { boundary in
-                        ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
-                            MapPolyline(coordinates: closed(ring))
-                                .stroke(.primary.opacity(0.85), lineWidth: 2)
+                        ForEach(stateBoundaries) { boundary in
+                            if let governor = GovernorDirectory.governor(forState: boundary.state) {
+                                Annotation(governor.name, coordinate: boundary.centroid) {
+                                    GovernorPortrait(governor: governor, size: 40, style: .outline)
+                                }
+                            }
                         }
-                    }
+                    } else {
+                        ForEach(districtBoundaries) { boundary in
+                            ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
+                                MapPolygon(coordinates: closed(ring))
+                                    .foregroundStyle(fillColor(for: boundary).opacity(0.4))
+                                    .stroke(.secondary.opacity(0.5), lineWidth: 1)
+                                    .mapOverlayLevel(level: .aboveLabels)
+                            }
+                        }
 
-                    ForEach(mappable) { rep in
-                        if let coordinate = districtCenter(for: rep) {
-                            Annotation(rep.name, coordinate: coordinate) {
-                                RepresentativePortrait(representative: rep, size: 40, style: .outline)
+                        ForEach(stateBoundaries) { boundary in
+                            ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
+                                MapPolyline(coordinates: closed(ring))
+                                    .stroke(.primary.opacity(0.85), lineWidth: 2)
+                            }
+                        }
+
+                        ForEach(mappable) { rep in
+                            if let coordinate = districtCenter(for: rep) {
+                                Annotation(rep.name, coordinate: coordinate) {
+                                    RepresentativePortrait(representative: rep, size: 40, style: .outline)
+                                }
                             }
                         }
                     }
@@ -97,8 +136,19 @@ struct DistrictMapView: View {
                     guard let coordinate = proxy.convert(screenPoint, from: .local) else { return }
                     selectedDistrict = districtBoundaries.first { $0.contains(coordinate) }
                 }
+                .onGeometryChange(for: CGSize.self, of: \.size) { mapViewSize = $0 }
                 .onMapCameraChange(frequency: .onEnd) { context in
                     isCenteredOnUserDistrict = isRegion(context.region, centeredOn: userDistrictBoundary)
+                }
+                .onMapCameraChange(frequency: .continuous) { context in
+                    isStateLevel = context.region.span.latitudeDelta > Self.stateLevelSpanThreshold
+                    visibleMapRect = context.rect
+                }
+                .onChange(of: isStateLevel) { _, zoomedToStateLevel in
+                    guard zoomedToStateLevel else { return }
+                    for boundary in stateBoundaries {
+                        loadFlagImageIfNeeded(for: boundary.state)
+                    }
                 }
                 // `.mapControls` is built for MapKit's own control types (MapCompass,
                 // MapUserLocationButton, etc.) — a plain custom Button placed inside it
@@ -205,6 +255,69 @@ struct DistrictMapView: View {
         case .democrat: return Color(red: 0.40, green: 0.66, blue: 1.0)
         case .republican: return Color(red: 1.0, green: 0.40, blue: 0.38)
         case .independent: return party.color
+        }
+    }
+
+    /// How many on-screen points one Mercator "map point" currently covers —
+    /// derived from the map view's rendered size and the map rect it's
+    /// showing, so a boundary's extent can be converted into the screen-space
+    /// size its polygon actually occupies at the current zoom.
+    private var screenPointsPerMapUnit: Double {
+        guard visibleMapRect.size.width > 0 else { return 0 }
+        return mapViewSize.width / visibleMapRect.size.width
+    }
+
+    /// A boundary's extent in Mercator "map point" units (width, height) —
+    /// combined with `screenPointsPerMapUnit`, this gives the on-screen size
+    /// of a state's polygon so its flag fill can be scaled to cover it.
+    private func mapUnitSpan(for boundary: MapBoundary) -> (width: Double, height: Double) {
+        let points = boundary.rings.flatMap { $0 }.map { MKMapPoint($0) }
+        guard let minX = points.map(\.x).min(), let maxX = points.map(\.x).max(),
+              let minY = points.map(\.y).min(), let maxY = points.map(\.y).max()
+        else { return (0, 0) }
+        return (maxX - minX, maxY - minY)
+    }
+
+    /// The fill style for a state's polygon at state-level zoom: its flag
+    /// image, scaled to cover the polygon's on-screen bounding box (the same
+    /// "fill the frame, crop the excess" look as `StateFlagImage`'s
+    /// `.scaledToFill()`), or a neutral placeholder tint while the flag is
+    /// still loading.
+    private func stateFillStyle(for boundary: MapBoundary) -> AnyShapeStyle {
+        guard let image = stateFlagImages[boundary.state],
+              let pixelSize = stateFlagPixelSizes[boundary.state],
+              pixelSize.width > 0, pixelSize.height > 0,
+              screenPointsPerMapUnit > 0
+        else {
+            return AnyShapeStyle(Color.secondary.opacity(0.25))
+        }
+        let span = mapUnitSpan(for: boundary)
+        let boxWidth = span.width * screenPointsPerMapUnit
+        let boxHeight = span.height * screenPointsPerMapUnit
+        guard boxWidth > 0, boxHeight > 0 else {
+            return AnyShapeStyle(Color.secondary.opacity(0.25))
+        }
+        let scale = max(boxWidth / pixelSize.width, boxHeight / pixelSize.height)
+        return AnyShapeStyle(ImagePaint(image: image, scale: CGFloat(scale)))
+    }
+
+    /// Loads and caches a state's flag the first time it's needed for the
+    /// state-level fill, recording its pixel size so `stateFillStyle(for:)`
+    /// can size the fill to cover the state's polygon.
+    private func loadFlagImageIfNeeded(for state: String) {
+        guard stateFlagImages[state] == nil, !loadingFlagStates.contains(state),
+              let url = StateFlagDirectory.flagURL(forState: state)
+        else { return }
+        loadingFlagStates.insert(state)
+        Task {
+            defer { loadingFlagStates.remove(state) }
+            guard let platformImage = await ImageCache.shared.image(for: url) else { return }
+            #if canImport(UIKit)
+            stateFlagImages[state] = Image(uiImage: platformImage)
+            #elseif canImport(AppKit)
+            stateFlagImages[state] = Image(nsImage: platformImage)
+            #endif
+            stateFlagPixelSizes[state] = platformImage.size
         }
     }
 
