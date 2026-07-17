@@ -25,6 +25,7 @@ struct DistrictMapView: View {
     @State private var isCenteredOnUserDistrict = false
     @State private var worldMask: MKPolygon?
     @State private var nationalHouseDirectory = NationalHouseDirectory()
+    @State private var nationalSenateDirectory = NationalSenateDirectory()
     @State private var populationDirectory = DistrictPopulationDirectory()
     @State private var industryDirectory = DistrictIndustryDirectory()
     @State private var cityDirectory = DistrictCityDirectory()
@@ -204,7 +205,8 @@ struct DistrictMapView: View {
                     hasSetInitialRegion = true
                     position = .region(wideRegion(centeredOn: userCoordinate))
                 }
-                async let nationalLoad: Void = nationalHouseDirectory.loadIfNeeded()
+                async let nationalHouseLoad: Void = nationalHouseDirectory.loadIfNeeded()
+                async let nationalSenateLoad: Void = nationalSenateDirectory.loadIfNeeded()
                 if districtBoundaries.isEmpty, stateBoundaries.isEmpty {
                     async let districts = Task.detached(priority: .userInitiated) { BoundaryLoader.loadDistricts() }.value
                     async let states = Task.detached(priority: .userInitiated) { BoundaryLoader.loadStates() }.value
@@ -213,7 +215,8 @@ struct DistrictMapView: View {
                     worldMask = Self.buildWorldMask(from: stateBoundaries)
                     centerOnUserDistrictIfNeeded()
                 }
-                await nationalLoad
+                await nationalHouseLoad
+                await nationalSenateLoad
             }
             .onChange(of: representatives) { centerOnUserDistrictIfNeeded() }
             .sheet(item: $selectedDistrict) { boundary in
@@ -230,7 +233,7 @@ struct DistrictMapView: View {
                 .presentationDragIndicator(.visible)
             }
             .sheet(item: $selectedState) { boundary in
-                StateDetailSheet(boundary: boundary)
+                StateDetailSheet(boundary: boundary, senators: nationalSenateDirectory.senators(forState: boundary.state))
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
             }
@@ -603,6 +606,7 @@ private struct DistrictDetailSheet: View {
 /// the two sheets read as one consistent design at either zoom level.
 private struct StateDetailSheet: View {
     let boundary: MapBoundary
+    let senators: [Representative]
 
     private var governor: Governor? {
         GovernorDirectory.governor(forState: boundary.state)
@@ -634,12 +638,32 @@ private struct StateDetailSheet: View {
                     .buttonStyle(.plain)
                 }
 
+                if !senators.isEmpty {
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(senators.indices, id: \.self) { index in
+                            NavigationLink(value: senators[index]) {
+                                RepresentativeRow(representative: senators[index])
+                            }
+                            .buttonStyle(.plain)
+
+                            if index < senators.count - 1 {
+                                Divider()
+                            }
+                        }
+                    }
+                }
+
                 Spacer()
             }
             .padding()
             .padding(.top, 16)
             .navigationDestination(for: Governor.self) { governor in
                 GovernorDetailView(governor: governor)
+            }
+            .navigationDestination(for: Representative.self) { rep in
+                RepresentativeDetailView(representative: rep)
             }
         }
     }

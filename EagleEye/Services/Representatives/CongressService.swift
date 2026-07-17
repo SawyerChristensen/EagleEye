@@ -193,6 +193,49 @@ struct CongressService {
         return members
     }
 
+    /// Fetches every current U.S. Senator nationwide — independent of any one
+    /// state — so the district map's state-level sheet can show a tapped
+    /// state's two senators without a per-tap network round trip. Mirrors
+    /// `allCurrentHouseMembers()`, just filtered to the Senate.
+    func allCurrentSenateMembers() async throws -> [Representative] {
+        guard !apiKey.isEmpty, apiKey != Self.apiKeyPlaceholder else {
+            throw ServiceError.missingAPIKey
+        }
+
+        let pageSize = 250
+        var offset = 0
+        var members: [Representative] = []
+
+        while true {
+            var components = URLComponents(
+                string: "https://api.congress.gov/v3/member/congress/\(Self.currentCongress)"
+            )!
+            components.queryItems = [
+                URLQueryItem(name: "currentMember", value: "true"),
+                URLQueryItem(name: "limit", value: String(pageSize)),
+                URLQueryItem(name: "offset", value: String(offset)),
+                URLQueryItem(name: "format", value: "json"),
+                URLQueryItem(name: "api_key", value: apiKey),
+            ]
+            guard let url = components.url else { throw URLError(.badURL) }
+
+            let (data, response) = try await session.data(from: url)
+            guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
+                throw ServiceError.badResponse((response as? HTTPURLResponse)?.statusCode ?? -1)
+            }
+
+            let payload = try JSONDecoder().decode(MemberListResponse.self, from: data)
+            members += payload.members.compactMap(Representative.init(member:)).filter {
+                $0.office == .senator
+            }
+
+            guard payload.members.count == pageSize else { break }
+            offset += pageSize
+        }
+
+        return members
+    }
+
     /// Returns a copy of `representative` with its sponsored/cosponsored bill
     /// lists and recent voting history filled in from the member's Congress.gov
     /// endpoints. The lookups run concurrently. Sample members (no Bioguide ID)
