@@ -17,7 +17,9 @@
     - [x] Show each district's top sectors/industries in the district detail sheet
     - [x] Show each district's top cities by population in the district detail sheet
     - [x] Show each district's top universities in the district detail sheet
-  - [ ] Once a certain zoom level is reached, out to the state level, display the governors icons in the middle of the state. The state outline should be filled with the state flag instead of a single party color.
+  - [~] Once a certain zoom level is reached, out to the state level, display the governors icons in the middle of the state. The state outline should be filled with the state flag instead of a single party color.
+    - [x] Add a `StateFlagDirectory` (postal code -> Wikimedia Commons flag image URL, resolved via `Special:FilePath` so no per-state upload hash is needed) and a `StateFlagImage` view that loads/caches it, mirroring `GovernorPortrait`
+    - [ ] Detect the map's zoom level and, once zoomed out to state level, swap each state polygon's fill from its district party-color tint to its `StateFlagImage` and show the state's governor (via `GovernorPortrait`) annotated at the state's centroid instead of per-district representative pins
     - [ ] The transition between the different color coded district outlines and the state flag/state level representatives should be smooth
     - [ ] Like the district information view, the state should show an outline of the state with the flag inside of it. this should also not be squashed and be recreated similar to how the mini district previews are rendered.
     - [ ] The state level information view should have information about the state, similar to what the districts have. total population, top sectors/industry, top cities by population, top universities, etc. this view should should show the governor on top, the two senators, and list of all house representatives in the state under the senators
