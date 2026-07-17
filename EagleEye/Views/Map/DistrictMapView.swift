@@ -25,6 +25,7 @@ struct DistrictMapView: View {
     @State private var worldMask: MKPolygon?
     @State private var nationalHouseDirectory = NationalHouseDirectory()
     @State private var populationDirectory = DistrictPopulationDirectory()
+    @State private var industryDirectory = DistrictIndustryDirectory()
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -133,7 +134,8 @@ struct DistrictMapView: View {
                     boundary: boundary,
                     color: fillColor(for: boundary),
                     representative: representative(for: boundary),
-                    populationDirectory: populationDirectory
+                    populationDirectory: populationDirectory,
+                    industryDirectory: industryDirectory
                 )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
@@ -321,9 +323,14 @@ private struct DistrictDetailSheet: View {
     let color: Color
     let representative: Representative?
     let populationDirectory: DistrictPopulationDirectory
+    let industryDirectory: DistrictIndustryDirectory
 
     private var population: Int? {
         populationDirectory.cachedPopulation(state: boundary.state, district: boundary.district ?? 0)
+    }
+
+    private var topIndustries: [String]? {
+        industryDirectory.cachedTopIndustries(state: boundary.state, district: boundary.district ?? 0)
     }
 
     private static let populationFormatter: NumberFormatter = {
@@ -354,6 +361,19 @@ private struct DistrictDetailSheet: View {
                 }
                 .task {
                     await populationDirectory.loadIfNeeded(state: boundary.state, district: boundary.district ?? 0)
+                    await industryDirectory.loadIfNeeded(state: boundary.state, district: boundary.district ?? 0)
+                }
+
+                if let topIndustries, !topIndustries.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Top Industries")
+                            .font(.subheadline.bold())
+                        ForEach(topIndustries, id: \.self) { industry in
+                            Text(industry)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
 
                 Divider()
