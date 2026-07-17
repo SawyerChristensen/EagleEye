@@ -7,8 +7,8 @@
     - [x] Add the "Top PAC Funders" / "Top Individual Funders" sections to the governor profile (mirroring `RepresentativeDetailView`), backed by a new `GovernorFunderDirectory` keyed by state — seeded empty for now since, unlike representatives' live OpenFEC lookup, there's no free API for gubernatorial campaign finance across all 50 states
     - [~] Populate `GovernorFunderDirectory` with real, sourced top PAC/individual funder entries per state (hand-curated like `StateLawDirectory`, or wired to a verified state campaign-finance data source)
       - [x] Add sourced PAC/individual funder entries for IL, MI, and FL (OpenSecrets / Transparency USA, 2022 races)
-      - [ ] Add sourced PAC/individual funder entries for TX, GA, and CO
-      - [ ] Add sourced PAC/individual funder entries for CA, NY, and OH
+      - [x] Add sourced PAC/individual funder entries for TX, GA, and CO
+      - [ ] Add sourced PAC/individual funder entries for CA, NY, and OH, etc
   - [ ] Pull governors headshots from the national governors association
 
 - [ ] Build the interactive map view (evaluate performance and utility)
@@ -18,6 +18,7 @@
     - [ ] Like the district information view, the state should show an outline of the state with the flag inside of it. this should also not be squashed and be recreated similar to how the mini district previews are rendered.
     - [ ] The state level information view should have information about the state, similar to what the districts have. total population, top sectors/industry, top cities by population, top universities, etc. this view should should show the governor on top, the two senators, and list of all house representatives in the state under the senators
 
+- [ ] In the voting history for an enacted law, I only see how my house of representatives representative voted. I want to see how my senators voted as well, but their votes dont show up (at least in the same section as my representatives vote shows up). I want to see my senators vote in the same spot
 - [ ] Improve the general performance of the map. Improve the fps, and maybe fix artifacts like the black overlay on the rest of the world having to fill in when the user zooms out fast. currently it only seems to take up the part of the screen the user is looking at
 - [ ] Some districts dont have representatives on file. theres one in california that I see, one in texas, one in florida. Do those districts truly not have a representative, or is that a glitch?
 

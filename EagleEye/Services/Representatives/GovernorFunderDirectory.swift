@@ -26,6 +26,9 @@ enum GovernorFunderDirectory {
         GovernorFunder(state: "MI", funder: Funder(name: "SEIU Committee on Political Education", amount: 51_500, category: "Labor Unions")),
         GovernorFunder(state: "MI", funder: Funder(name: "Iron Workers Local 25 PAC", amount: 25_000, category: "Labor Unions")),
         GovernorFunder(state: "MI", funder: Funder(name: "General Motors PAC", amount: 10_000, category: "Automotive")),
+        GovernorFunder(state: "TX", funder: Funder(name: "Texans for Lawsuit Reform PAC", amount: 100_000, category: "Legal Reform")),
+        GovernorFunder(state: "GA", funder: Funder(name: "Republican Governors Association", amount: 9_000_000, category: "Party Committee")),
+        GovernorFunder(state: "CO", funder: Funder(name: "Democratic Governors Association", amount: 1_500_000, category: "Party Committee")),
     ]
 
     /// Top individual contributors (totaled by employer or occupation),
@@ -36,6 +39,10 @@ enum GovernorFunderDirectory {
         GovernorFunder(state: "MI", funder: Funder(name: "Melinda French Gates", amount: 7_150, category: "Philanthropy")),
         GovernorFunder(state: "MI", funder: Funder(name: "Steve Ballmer", amount: 7_000, category: "Business")),
         GovernorFunder(state: "MI", funder: Funder(name: "Rhea Perlman", amount: 5_000, category: "Entertainment")),
+        GovernorFunder(state: "TX", funder: Funder(name: "S. Javaid Anwar", amount: 2_222_086, category: "Oil & Gas")),
+        GovernorFunder(state: "TX", funder: Funder(name: "Kelcy Warren", amount: 1_000_000, category: "Energy")),
+        GovernorFunder(state: "GA", funder: Funder(name: "Timothy Mellon", amount: 5_000_000, category: "Transportation")),
+        GovernorFunder(state: "CO", funder: Funder(name: "Jared Polis (self-funded)", amount: 12_600_000, category: "Self-Funded")),
     ]
 
     /// The PAC funders on record for the given state.
