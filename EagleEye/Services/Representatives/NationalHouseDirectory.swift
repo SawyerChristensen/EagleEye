@@ -25,6 +25,14 @@ final class NationalHouseDirectory {
         }
     }
 
+    /// All current House members representing a given state, sorted by
+    /// district number.
+    func representatives(forState state: String) -> [Representative] {
+        members
+            .filter { $0.state == state }
+            .sorted { ($0.district ?? 0) < ($1.district ?? 0) }
+    }
+
     /// Fetches every current House member nationwide, once per app session —
     /// the roster doesn't change often enough to warrant refetching every
     /// time the map appears. Leaves any cached roster in place on failure

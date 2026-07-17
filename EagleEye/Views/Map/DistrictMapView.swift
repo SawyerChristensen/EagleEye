@@ -233,9 +233,13 @@ struct DistrictMapView: View {
                 .presentationDragIndicator(.visible)
             }
             .sheet(item: $selectedState) { boundary in
-                StateDetailSheet(boundary: boundary, senators: nationalSenateDirectory.senators(forState: boundary.state))
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
+                StateDetailSheet(
+                    boundary: boundary,
+                    senators: nationalSenateDirectory.senators(forState: boundary.state),
+                    representatives: nationalHouseDirectory.representatives(forState: boundary.state)
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
             }
         }
     }
@@ -607,6 +611,7 @@ private struct DistrictDetailSheet: View {
 private struct StateDetailSheet: View {
     let boundary: MapBoundary
     let senators: [Representative]
+    let representatives: [Representative]
 
     private var governor: Governor? {
         GovernorDirectory.governor(forState: boundary.state)
@@ -614,51 +619,72 @@ private struct StateDetailSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 20) {
-                HStack(alignment: .top, spacing: 16) {
-                    Text(MapBoundary.stateName(for: boundary.state))
-                        .font(.title2.bold())
-                        .frame(maxWidth: .infinity, alignment: .leading)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    HStack(alignment: .top, spacing: 16) {
+                        Text(MapBoundary.stateName(for: boundary.state))
+                            .font(.title2.bold())
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
-                    StateFlagImage(state: boundary.state)
-                        .frame(width: 90, height: 90)
-                        .clipShape(DistrictOutlineShape(rings: boundary.rings))
-                        .overlay(
-                            DistrictOutlineShape(rings: boundary.rings)
-                                .stroke(.primary.opacity(0.85), lineWidth: 1.5)
-                        )
-                }
-
-                if let governor {
-                    Divider()
-
-                    NavigationLink(value: governor) {
-                        GovernorRow(governor: governor)
+                        StateFlagImage(state: boundary.state)
+                            .frame(width: 90, height: 90)
+                            .clipShape(DistrictOutlineShape(rings: boundary.rings))
+                            .overlay(
+                                DistrictOutlineShape(rings: boundary.rings)
+                                    .stroke(.primary.opacity(0.85), lineWidth: 1.5)
+                            )
                     }
-                    .buttonStyle(.plain)
-                }
 
-                if !senators.isEmpty {
-                    Divider()
+                    if let governor {
+                        Divider()
 
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(senators.indices, id: \.self) { index in
-                            NavigationLink(value: senators[index]) {
-                                RepresentativeRow(representative: senators[index])
+                        NavigationLink(value: governor) {
+                            GovernorRow(governor: governor)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    if !senators.isEmpty {
+                        Divider()
+
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(senators.indices, id: \.self) { index in
+                                NavigationLink(value: senators[index]) {
+                                    RepresentativeRow(representative: senators[index])
+                                }
+                                .buttonStyle(.plain)
+
+                                if index < senators.count - 1 {
+                                    Divider()
+                                }
                             }
-                            .buttonStyle(.plain)
+                        }
+                    }
 
-                            if index < senators.count - 1 {
-                                Divider()
+                    if !representatives.isEmpty {
+                        Divider()
+
+                        Text("House Delegation")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.secondary)
+
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(representatives.indices, id: \.self) { index in
+                                NavigationLink(value: representatives[index]) {
+                                    RepresentativeRow(representative: representatives[index])
+                                }
+                                .buttonStyle(.plain)
+
+                                if index < representatives.count - 1 {
+                                    Divider()
+                                }
                             }
                         }
                     }
                 }
-
-                Spacer()
+                .padding()
+                .padding(.top, 16)
             }
-            .padding()
-            .padding(.top, 16)
             .navigationDestination(for: Governor.self) { governor in
                 GovernorDetailView(governor: governor)
             }

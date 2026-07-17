@@ -25,7 +25,7 @@
     - [~] The state level information view should have information about the state, similar to what the districts have. total population, top sectors/industry, top cities by population, top universities, etc. this view should should show the governor on top, the two senators, and list of all house representatives in the state under the senators
       - [x] Show the state's governor at the top of the state-level detail sheet (mirroring `GovernorRow`/`GovernorDetailView`)
       - [x] Show the state's two senators in the state-level detail sheet, below the governor
-      - [ ] Show a list of all House representatives for the state in the state-level detail sheet, below the senators
+      - [x] Show a list of all House representatives for the state in the state-level detail sheet, below the senators
       - [ ] Add total population, top sectors/industries, top cities, and top universities sections to the state-level detail sheet (new state-keyed data directories, mirroring the district ones)
 
 - [ ] In the voting history for an enacted law, I only see how my house of representatives representative voted. I want to see how my senators voted as well, but their votes dont show up (at least in the same section as my representatives vote shows up). I want to see my senators vote in the same spot
