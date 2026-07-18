@@ -124,7 +124,23 @@ final class RepresentativesStore {
 
                 let members = try await service.currentMembers(forState: stateCode)
                 let delegation = Self.delegation(from: members, district: district)
-                representatives = await Self.enrichedProfiles(
+
+                // Publish the basic roster right away — it already carries each
+                // member's name and portrait URL, everything the list needs to
+                // render — so the delegation appears immediately instead of
+                // blocking on the slow per-member enrichment below (bills, votes,
+                // committees, funders, trade disclosures, and rate-limited office
+                // geocoding). The profiles fill in in the background and the list
+                // updates in place when they arrive. Skip this when a delegation
+                // is already on screen (a silent refresh over cached data) so we
+                // don't briefly strip the richer cached profiles back to basics.
+                if representatives.isEmpty {
+                    representatives = delegation
+                    governor = GovernorDirectory.governor(forState: stateCode)
+                    loadState = .ready
+                }
+
+                let enriched = await Self.enrichedProfiles(
                     for: delegation,
                     using: service,
                     committeeService: committeeService,
@@ -133,6 +149,7 @@ final class RepresentativesStore {
                     disclosureService: disclosureService,
                     marketService: marketService
                 )
+                representatives = enriched
                 governor = GovernorDirectory.governor(forState: stateCode)
                 cachedCoordinate = coordinate
                 Self.saveCache(coordinate: coordinate, stateCode: stateCode, representatives: representatives)

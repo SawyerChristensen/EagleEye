@@ -8,6 +8,7 @@
 
 import Foundation
 import CoreLocation
+import MapKit
 
 /// A single state or congressional-district boundary, ready to draw on a map.
 /// A boundary can have multiple `rings` (e.g. a district with offshore islands).
@@ -15,7 +16,45 @@ struct MapBoundary: Identifiable {
     let id: String
     let state: String
     let district: Int?
+    /// Full-detail geometry (simplified to ~110m at load) — used for
+    /// hit-testing, the detail-sheet thumbnail, and drawing when zoomed in
+    /// close enough that the extra vertices are actually visible.
     let rings: [[CLLocationCoordinate2D]]
+    /// A far coarser copy of `rings` (simplified to ~2km) drawn in place of
+    /// the full geometry once the map is zoomed out — at that scale the
+    /// dropped vertices are sub-pixel, but they're the bulk of the polygon
+    /// data MapKit has to buffer, so swapping to this cuts the Metal resource
+    /// count dramatically when many boundaries are on screen at once.
+    let coarseRings: [[CLLocationCoordinate2D]]
+    /// This boundary's bounding box in Mercator map-point space, precomputed
+    /// so the map can cheaply cull boundaries that don't intersect the
+    /// visible viewport instead of handing every one to MapKit every frame.
+    let boundingMapRect: MKMapRect
+
+    /// The coarse geometry is simplified this aggressively (in degrees, ≈2km).
+    /// Only ever drawn when zoomed far enough out that this is imperceptible.
+    private static let coarseTolerance = 0.02
+
+    init(id: String, state: String, district: Int?, rings: [[CLLocationCoordinate2D]]) {
+        self.id = id
+        self.state = state
+        self.district = district
+        self.rings = rings
+        self.coarseRings = rings.map { BoundaryLoader.simplify($0, tolerance: Self.coarseTolerance) }
+        self.boundingMapRect = Self.boundingRect(of: rings)
+    }
+
+    /// Union of the map-point bounding boxes of every vertex in every ring.
+    private static func boundingRect(of rings: [[CLLocationCoordinate2D]]) -> MKMapRect {
+        var rect = MKMapRect.null
+        for ring in rings {
+            for coordinate in ring {
+                let point = MKMapPoint(coordinate)
+                rect = rect.union(MKMapRect(origin: point, size: MKMapSize(width: 0, height: 0)))
+            }
+        }
+        return rect
+    }
 
     /// A point near the geometric middle of this boundary, used to pin a
     /// representative on the map. Uses the largest ring by area — rather than

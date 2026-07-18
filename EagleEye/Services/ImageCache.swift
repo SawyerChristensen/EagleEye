@@ -138,11 +138,20 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
             }
         }
         .task(id: url) {
-            guard let url else {
-                image = nil
-                return
-            }
+            // Clear any previously loaded image up front. When this view is
+            // recycled for a different subject — e.g. MapKit reusing an
+            // annotation view instance as the camera pans across states — `url`
+            // changes and this task restarts. Without resetting here, the
+            // recycled view keeps showing the *previous* subject's photo until
+            // the new one loads, which reads as a governor/member portrait
+            // jumping onto the wrong pin (and vanishing from its own).
+            image = nil
+            guard let url else { return }
             if let platformImage = await ImageCache.shared.image(for: url) {
+                // The await above suspends; if `url` changed (view recycled)
+                // while we were loading, this task was cancelled — bail so a
+                // stale, slow load can't overwrite the correct image.
+                guard !Task.isCancelled else { return }
                 #if canImport(UIKit)
                 image = Image(uiImage: platformImage)
                 #elseif canImport(AppKit)

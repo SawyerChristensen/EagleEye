@@ -2,11 +2,25 @@
 //  DistrictMapView.swift
 //  EagleEye
 //
-//  The right "Map" tab: shows where the user's representatives' offices are.
+//  The right "Map" tab: colored congressional-district outlines across the US,
+//  fading to state flags + governor pins when zoomed out.
+//
+//  Rendered with a UIKit `MKMapView` wrapped in `DistrictMapRepresentable`
+//  rather than SwiftUI's declarative `Map`. The declarative `Map` rebuilds and
+//  re-diffs its entire `MapContent` tree every time the view body re-runs — and
+//  camera changes forced that on nearly every gesture frame — which is what made
+//  the old implementation stutter and drop district fills at the viewport edge.
+//  MKMapView takes the opposite approach: the ~435 district polygons are handed
+//  to it once as overlays, and MapKit owns viewport culling, tiling, level of
+//  detail, and per-tile redraw internally. Panning reuses cached tiles, so
+//  there are no holes and no per-frame geometry rebuild.
 //
 
 import SwiftUI
 import MapKit
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct DistrictMapView: View {
     let representatives: [Representative]
@@ -15,7 +29,6 @@ struct DistrictMapView: View {
     /// boundary parsing and lookup finish.
     let userCoordinate: CLLocationCoordinate2D?
 
-    @State private var position: MapCameraPosition = .automatic
     @State private var stateBoundaries: [MapBoundary] = []
     @State private var districtBoundaries: [MapBoundary] = []
     @State private var selectedDistrict: MapBoundary?
@@ -23,27 +36,17 @@ struct DistrictMapView: View {
     @State private var hasSetInitialRegion = false
     @State private var hasCenteredOnUserDistrict = false
     @State private var isCenteredOnUserDistrict = false
-    @State private var worldMask: MKPolygon?
-    /// Keeps the camera from panning/zooming out to the rest of the globe —
-    /// every district, state, and territory this app tracks (CONUS, Alaska,
-    /// Hawaii, Puerto Rico, DC) sits within this box, so there's no reason to
-    /// spend tile-loading and rendering budget past it. A single rectangle
-    /// can't exclude next-door Canada/Mexico without also cutting off AK/HI/PR,
-    /// but it does rule out the rest of the world, which is the actual cost.
-    private static let cameraBounds = MapCameraBounds(
-        centerCoordinateBounds: MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 45, longitude: -122),
-            span: MKCoordinateSpan(latitudeDelta: 62, longitudeDelta: 118)
-        ),
-        maximumDistance: 12_000_000
-    )
+    /// The region the map opens on: a rough metro-wide box around the user's
+    /// coordinate, applied once so the map isn't pointed at MapKit's generic
+    /// default view while boundaries load.
+    @State private var initialRegion: MKCoordinateRegion?
+    /// Bumped to ask the map to animate back to the user's district. Every
+    /// increment is one recenter request the representable applies.
+    @State private var recenterTrigger = 0
+
     /// `partyByDistrict`, rebuilt only when the underlying roster actually
-    /// changes rather than on every access — see that property for why.
+    /// changes rather than on every access.
     @State private var partyByDistrictCache: [String: Party] = [:]
-    /// `mapUnitSpan(for:)`, precomputed once per state boundary when
-    /// `stateBoundaries` loads (the geometry is static) rather than
-    /// recomputed on every frame of the state-level crossfade.
-    @State private var mapUnitSpanCache: [String: (width: Double, height: Double)] = [:]
     @State private var nationalHouseDirectory = NationalHouseDirectory()
     @State private var nationalSenateDirectory = NationalSenateDirectory()
     @State private var populationDirectory = DistrictPopulationDirectory()
@@ -55,150 +58,68 @@ struct DistrictMapView: View {
     @State private var stateCityDirectory = StateCityDirectory()
     @State private var stateUniversityDirectory = StateUniversityDirectory()
 
-    /// The camera's current latitude span, updated continuously as the user
-    /// pans/zooms — drives `stateLevelProgress` below.
-    @State private var visibleLatitudeSpan: Double = 0
-    @State private var stateFlagImages: [String: Image] = [:]
-    @State private var stateFlagPixelSizes: [String: CGSize] = [:]
-    @State private var loadingFlagStates: Set<String> = []
-    /// The map view's own rendered size and the Mercator "map rect" it's
-    /// currently showing — together these convert a boundary's extent into
-    /// on-screen points, so a state's flag fill can be sized to actually
-    /// cover its polygon. See `screenPointsPerMapUnit`.
-    @State private var mapViewSize: CGSize = .zero
-    @State private var visibleMapRect: MKMapRect = .world
-
     @Environment(\.colorScheme) private var colorScheme
 
-    /// The band of latitude span (in degrees) over which the map crossfades
-    /// from district-level content to state-level content. Below the lower
-    /// bound districts are legible and shown at full strength; above the
-    /// upper bound they're too small to read and the state flags/governor
-    /// pins are shown at full strength instead. Within the band both layers
-    /// render simultaneously at partial opacity so the swap reads as a
-    /// smooth fade rather than an instant cut.
-    private static let stateLevelLowerSpan: Double = 5.0
-    private static let stateLevelUpperSpan: Double = 7.0
+    /// Keeps the camera from panning/zooming out to the rest of the globe —
+    /// every district, state, and territory this app tracks (CONUS, Alaska,
+    /// Hawaii, Puerto Rico, DC) sits within this box.
+    static let cameraBoundsRegion = MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 45, longitude: -122),
+        span: MKCoordinateSpan(latitudeDelta: 40, longitudeDelta: 105)
+    )
+    static let maxCenterDistance: CLLocationDistance = 12_000_000
 
-    /// 0 at district-level zoom, 1 once fully zoomed out to state level, and
-    /// a continuous fraction while crossing the band between.
-    private var stateLevelProgress: Double {
-        let span = visibleLatitudeSpan
-        if span <= Self.stateLevelLowerSpan { return 0 }
-        if span >= Self.stateLevelUpperSpan { return 1 }
-        return (span - Self.stateLevelLowerSpan) / (Self.stateLevelUpperSpan - Self.stateLevelLowerSpan)
-    }
-
-    /// Members to show as pins. Senators are excluded for now — they represent
-    /// a whole state rather than a single district, so they have no "middle of
-    /// the district" point to pin at.
+    /// Members to show as pins. Senators are excluded — they represent a whole
+    /// state rather than a single district, so they have no "middle of the
+    /// district" point to pin at.
     private var mappable: [Representative] {
         representatives.filter { $0.office == .representative }
     }
 
-    /// Every House member nationwide, keyed by state and district — used to
-    /// tint every district's fill and to answer "who represents this
-    /// district" for a tapped district, not just the user's own. Backed by
-    /// `partyByDistrictCache`, rebuilt only when the roster changes: this is
-    /// read once per district per render (~435 districts), and with
-    /// `.onMapCameraChange(frequency: .continuous)` re-evaluating the view
-    /// body on every gesture frame, rebuilding a fresh dictionary from all
-    /// ~435 members on every read made this effectively O(n²) main-thread
-    /// work during every pan/zoom frame.
-    private var partyByDistrict: [String: Party] { partyByDistrictCache }
-
     private func rebuildPartyByDistrictCache() {
         partyByDistrictCache = Dictionary(
-            nationalHouseDirectory.members.map { (districtKey(state: $0.state, district: $0.district), $0.party) },
+            nationalHouseDirectory.members.map { (Self.districtKey(state: $0.state, district: $0.district), $0.party) },
             uniquingKeysWith: { first, _ in first }
         )
     }
 
+    /// A lookup key combining state and district number; at-large districts use
+    /// `0`, matching the bundled Census boundary data. Congress.gov gives a
+    /// representative's state as a full name while the boundary data keys
+    /// districts by postal code, so both sides are normalized to the postal code.
+    static func districtKey(state: String, district: Int?) -> String {
+        let code = SenateService.stateCode(for: state) ?? state
+        return "\(code)-\(district ?? 0)"
+    }
+
     var body: some View {
         NavigationStack {
-            MapReader { proxy in
-                // Both crossfade layers (state and district) are built by
-                // dedicated @MapContentBuilder properties below, rather than
-                // inlined here, because folding this many conditional
-                // ForEach/Annotation branches into one big builder expression
-                // made the type checker time out.
-                Map(position: $position, bounds: Self.cameraBounds) {
-                    worldMaskLayer
-
-                    // Both layers render across the crossfade band (rather than
-                    // an `if/else` toggle) so the swap between district fills
-                    // and state flags reads as a fade instead of a hard cut —
-                    // each layer's opacity carries `stateLevelProgress` (or its
-                    // complement) baked into its style. Outside the band, the
-                    // fully-faded layer is skipped entirely to avoid paying for
-                    // invisible content at rest.
-                    let progress = stateLevelProgress
-                    if progress > 0 {
-                        stateFillLayer(progress: progress)
-                        governorAnnotationLayer(progress: progress)
-                    }
-
-                    if progress < 1 {
-                        districtFillLayer(progress: progress)
-                        stateOutlineLayer(progress: progress)
-                        representativeAnnotationLayer(progress: progress)
-                    }
-
-                    UserAnnotation()
-                }
-                .mapStyle(.standard(emphasis: .muted, pointsOfInterest: .excludingAll, showsTraffic: false))
-                .mapControls {
-                    MapCompass()
-                }
-                .onTapGesture { screenPoint in
-                    guard let coordinate = proxy.convert(screenPoint, from: .local) else { return }
-                    // Past the midpoint of the crossfade, districts are already
-                    // faded out and states read as the tappable layer — so route
-                    // the tap to whichever layer is actually legible right now.
-                    if stateLevelProgress > 0.5 {
-                        selectedState = stateBoundaries.first { $0.contains(coordinate) }
-                    } else {
-                        selectedDistrict = districtBoundaries.first { $0.contains(coordinate) }
-                    }
-                }
-                .onGeometryChange(for: CGSize.self, of: \.size) { mapViewSize = $0 }
-                .onMapCameraChange(frequency: .onEnd) { context in
-                    isCenteredOnUserDistrict = isRegion(context.region, centeredOn: userDistrictBoundary)
-                }
-                .onMapCameraChange(frequency: .continuous) { context in
-                    visibleLatitudeSpan = context.region.span.latitudeDelta
-                    visibleMapRect = context.rect
-                }
-                .onChange(of: nationalHouseDirectory.members) { _, _ in
-                    rebuildPartyByDistrictCache()
-                }
-                .onChange(of: stateLevelProgress > 0) { _, enteredStateLevelBand in
-                    // Start loading flags as soon as the crossfade band is
-                    // entered, not just once fully at state level, so images
-                    // are ready by the time the fade completes.
-                    guard enteredStateLevelBand else { return }
-                    for boundary in stateBoundaries {
-                        loadFlagImageIfNeeded(for: boundary.state)
-                    }
-                }
-                // `.mapControls` is built for MapKit's own control types (MapCompass,
-                // MapUserLocationButton, etc.) — a plain custom Button placed inside it
-                // is unreliable and can silently fail to render. An explicit overlay
-                // guarantees this button actually shows up.
-                .overlay(alignment: .bottomTrailing) {
-                    recenterButton
-                        .padding()
-                }
+            DistrictMapRepresentable(
+                districtBoundaries: districtBoundaries,
+                stateBoundaries: stateBoundaries,
+                partyByDistrict: partyByDistrictCache,
+                mappable: mappable,
+                colorSchemeIsDark: colorScheme == .dark,
+                initialRegion: initialRegion,
+                recenterRegion: recenterRegion,
+                recenterTrigger: recenterTrigger,
+                selectedDistrict: $selectedDistrict,
+                selectedState: $selectedState,
+                isCentered: $isCenteredOnUserDistrict
+            )
+            .ignoresSafeArea()
+            // The recenter control lives outside the ignored safe area so it
+            // stays clear of the home indicator and nav bar.
+            .overlay(alignment: .bottomTrailing) {
+                recenterButton
+                    .padding()
             }
             .navigationTitle("District Map")
             .navigationBarTitleDisplayMode(.inline)
             .task {
-                // Get roughly in the right place right away, using the coordinate
-                // we already have, rather than leaving MapKit's generic default
-                // view up while the district boundaries load and get simplified.
                 if !hasSetInitialRegion, let userCoordinate {
                     hasSetInitialRegion = true
-                    position = .region(wideRegion(centeredOn: userCoordinate))
+                    initialRegion = wideRegion(centeredOn: userCoordinate)
                 }
                 async let nationalHouseLoad: Void = nationalHouseDirectory.loadIfNeeded()
                 async let nationalSenateLoad: Void = nationalSenateDirectory.loadIfNeeded()
@@ -207,10 +128,6 @@ struct DistrictMapView: View {
                     async let states = Task.detached(priority: .userInitiated) { BoundaryLoader.loadStates() }.value
                     districtBoundaries = await districts
                     stateBoundaries = await states
-                    worldMask = Self.buildWorldMask(from: stateBoundaries)
-                    mapUnitSpanCache = Dictionary(
-                        uniqueKeysWithValues: stateBoundaries.map { ($0.id, Self.computeMapUnitSpan(for: $0)) }
-                    )
                     centerOnUserDistrictIfNeeded()
                 }
                 await nationalHouseLoad
@@ -218,6 +135,9 @@ struct DistrictMapView: View {
                 rebuildPartyByDistrictCache()
             }
             .onChange(of: representatives) { centerOnUserDistrictIfNeeded() }
+            .onChange(of: nationalHouseDirectory.members) { _, _ in
+                rebuildPartyByDistrictCache()
+            }
             .sheet(item: $selectedDistrict) { boundary in
                 DistrictDetailSheet(
                     boundary: boundary,
@@ -247,256 +167,20 @@ struct DistrictMapView: View {
         }
     }
 
-    /// A world-covering polygon with every state/territory boundary punched
-    /// out as a hole, so filling it grey tints everything outside the US
-    /// without touching the country's own territory.
-    ///
-    /// The mask is a wash the user never inspects closely — its holes don't
-    /// need to be stroked or hit-tested like the interactive state/district
-    /// polygons do — so an extra, coarser simplification pass on top of
-    /// `BoundaryLoader`'s standard tolerance keeps the path MapKit has to
-    /// rasterize per tile far cheaper without any visible loss of shape.
-    /// That path complexity is what made the mask visibly lag behind (read
-    /// as a "black overlay" catching up) on a fast pinch-zoom-out, since
-    /// MapKit has to re-fill many newly exposed tiles at once.
-    private static let worldMaskSimplificationTolerance = 0.01 // degrees, ≈1.1km
-
-    private static func buildWorldMask(from states: [MapBoundary]) -> MKPolygon? {
-        guard !states.isEmpty else { return nil }
-        // Longitude -180 and +180 are the same meridian, so a rectangle whose
-        // edges run straight from one to the other collapses into a degenerate
-        // sliver — MapKit then fills only the interior cut-outs (the US) instead
-        // of everything around them. Breaking each horizontal edge into spans
-        // shorter than 180° (midpoints at ±90 and 0) forces MapKit to render a
-        // real, full-globe rectangle so the cut-outs behave as holes.
-        let world = [
-            CLLocationCoordinate2D(latitude: 85, longitude: -180),
-            CLLocationCoordinate2D(latitude: 85, longitude: -90),
-            CLLocationCoordinate2D(latitude: 85, longitude: 0),
-            CLLocationCoordinate2D(latitude: 85, longitude: 90),
-            CLLocationCoordinate2D(latitude: 85, longitude: 180),
-            CLLocationCoordinate2D(latitude: -85, longitude: 180),
-            CLLocationCoordinate2D(latitude: -85, longitude: 90),
-            CLLocationCoordinate2D(latitude: -85, longitude: 0),
-            CLLocationCoordinate2D(latitude: -85, longitude: -90),
-            CLLocationCoordinate2D(latitude: -85, longitude: -180),
-        ]
-        let holes = states.flatMap { $0.rings }.map { ring in
-            BoundaryLoader.simplify(ring, tolerance: worldMaskSimplificationTolerance)
-        }.map { ring in
-            MKPolygon(coordinates: ring, count: ring.count)
-        }
-        return MKPolygon(coordinates: world, count: world.count, interiorPolygons: holes)
-    }
-
-    /// Closes a boundary ring so the outline draws back to its starting point.
-    private func closed(_ ring: [CLLocationCoordinate2D]) -> [CLLocationCoordinate2D] {
-        guard let first = ring.first else { return ring }
-        return ring + [first]
-    }
-
-    /// Extracted out of `body` — inlining this (and `districtFillPolygon`)
-    /// directly in the `MapContentBuilder` chain made the surrounding
-    /// expression too complex for the type checker to solve in reasonable
-    /// time.
-    private func stateFillPolygon(for boundary: MapBoundary, ring: [CLLocationCoordinate2D], progress: Double) -> some MapContent {
-        MapPolygon(coordinates: closed(ring))
-            .foregroundStyle(stateFillStyle(for: boundary, progress: progress))
-            .stroke(.primary.opacity(0.85 * progress), lineWidth: 2)
-            .mapOverlayLevel(level: .aboveLabels)
-    }
-
-    /// See `stateFillPolygon` — same type-checker-complexity reason.
-    private func districtFillPolygon(for boundary: MapBoundary, ring: [CLLocationCoordinate2D], progress: Double) -> some MapContent {
-        MapPolygon(coordinates: closed(ring))
-            .foregroundStyle(fillColor(for: boundary).opacity(0.4 * (1 - progress)))
-            .stroke(.secondary.opacity(0.5 * (1 - progress)), lineWidth: 1)
-            .mapOverlayLevel(level: .aboveLabels)
-    }
-
-    /// The remaining `Map` layers, each pulled into its own
-    /// `@MapContentBuilder` property/function for the same reason as
-    /// `stateFillPolygon`/`districtFillPolygon` above: keeping `body`'s own
-    /// `Map { ... }` closure shallow is what keeps the whole view
-    /// type-checkable in reasonable time.
-    @MapContentBuilder
-    private var worldMaskLayer: some MapContent {
-        if let worldMask {
-            MapPolygon(worldMask)
-                .foregroundStyle(.black.opacity(0.2))
-                // MapKit has no API to hide physical-feature labels
-                // ("Rocky Mountains", etc.) on the standard basemap.
-                // Drawing the overlays *above* the label layer (they
-                // default to `.aboveRoads`, below labels) lets the
-                // fill wash paint over that text and suppress it.
-                .mapOverlayLevel(level: .aboveLabels)
-        }
-    }
-
-    @MapContentBuilder
-    private func stateFillLayer(progress: Double) -> some MapContent {
-        ForEach(stateBoundaries) { boundary in
-            ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
-                stateFillPolygon(for: boundary, ring: ring, progress: progress)
-            }
-        }
-    }
-
-    @MapContentBuilder
-    private func governorAnnotationLayer(progress: Double) -> some MapContent {
-        ForEach(stateBoundaries) { boundary in
-            if let governor = GovernorDirectory.governor(forState: boundary.state) {
-                Annotation(governor.name, coordinate: boundary.centroid) {
-                    GovernorPortrait(governor: governor, size: 40, style: .outline)
-                        .opacity(progress)
-                }
-            }
-        }
-    }
-
-    @MapContentBuilder
-    private func districtFillLayer(progress: Double) -> some MapContent {
-        ForEach(districtBoundaries) { boundary in
-            ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
-                districtFillPolygon(for: boundary, ring: ring, progress: progress)
-            }
-        }
-    }
-
-    @MapContentBuilder
-    private func stateOutlineLayer(progress: Double) -> some MapContent {
-        ForEach(stateBoundaries) { boundary in
-            ForEach(Array(boundary.rings.enumerated()), id: \.offset) { _, ring in
-                MapPolyline(coordinates: closed(ring))
-                    .stroke(.primary.opacity(0.85 * (1 - progress)), lineWidth: 2)
-            }
-        }
-    }
-
-    @MapContentBuilder
-    private func representativeAnnotationLayer(progress: Double) -> some MapContent {
-        ForEach(mappable) { rep in
-            if let coordinate = districtCenter(for: rep) {
-                Annotation(rep.name, coordinate: coordinate) {
-                    RepresentativePortrait(representative: rep, size: 40, style: .outline)
-                        .opacity(1 - progress)
-                }
-            }
-        }
-    }
-
-    /// A lookup key combining state and district number; at-large districts
-    /// use `0`, matching the bundled Census boundary data. Congress.gov gives
-    /// representatives' state as a full name (e.g. "California") while the
-    /// bundled boundary data keys districts by postal code (e.g. "CA"), so
-    /// both sides are normalized to the postal code before comparing.
-    private func districtKey(state: String, district: Int?) -> String {
-        let code = SenateService.stateCode(for: state) ?? state
-        return "\(code)-\(district ?? 0)"
-    }
-
-    /// The fill color for a district's polygon: its representative's party
-    /// color, or clear if no member currently matches it (e.g. a non-voting
-    /// delegate's district). Blue and red run slightly brighter in dark mode,
-    /// where the stock system colors read too dark against the near-black map.
+    /// The fill color for a district's sheet swatch: its representative's party
+    /// color, or clear if no member matches it. Blue and red run slightly
+    /// brighter in dark mode, where the stock system colors read too dark.
     private func fillColor(for boundary: MapBoundary) -> Color {
-        guard let party = partyByDistrict[districtKey(state: boundary.state, district: boundary.district)] else {
+        guard let party = partyByDistrictCache[Self.districtKey(state: boundary.state, district: boundary.district)] else {
             return .clear
         }
-        guard colorScheme == .dark else { return party.color }
-        switch party {
-        case .democrat: return Color(red: 0.40, green: 0.66, blue: 1.0)
-        case .republican: return Color(red: 1.0, green: 0.40, blue: 0.38)
-        case .independent: return party.color
-        }
+        return DistrictMapPalette.color(for: party, dark: colorScheme == .dark)
     }
 
-    /// How many on-screen points one Mercator "map point" currently covers —
-    /// derived from the map view's rendered size and the map rect it's
-    /// showing, so a boundary's extent can be converted into the screen-space
-    /// size its polygon actually occupies at the current zoom.
-    private var screenPointsPerMapUnit: Double {
-        guard visibleMapRect.size.width > 0 else { return 0 }
-        return mapViewSize.width / visibleMapRect.size.width
-    }
-
-    /// A boundary's extent in Mercator "map point" units (width, height) —
-    /// combined with `screenPointsPerMapUnit`, this gives the on-screen size
-    /// of a state's polygon so its flag fill can be scaled to cover it.
-    /// A state's geometry never changes, so this is precomputed once into
-    /// `mapUnitSpanCache` when `stateBoundaries` loads rather than
-    /// recomputed (by scanning every coordinate) on every frame of the
-    /// state-level crossfade.
-    private func mapUnitSpan(for boundary: MapBoundary) -> (width: Double, height: Double) {
-        mapUnitSpanCache[boundary.id] ?? Self.computeMapUnitSpan(for: boundary)
-    }
-
-    private static func computeMapUnitSpan(for boundary: MapBoundary) -> (width: Double, height: Double) {
-        let points = boundary.rings.flatMap { $0 }.map { MKMapPoint($0) }
-        guard let minX = points.map(\.x).min(), let maxX = points.map(\.x).max(),
-              let minY = points.map(\.y).min(), let maxY = points.map(\.y).max()
-        else { return (0, 0) }
-        return (maxX - minX, maxY - minY)
-    }
-
-    /// The fill style for a state's polygon at state-level zoom: its flag
-    /// image, scaled to cover the polygon's on-screen bounding box (the same
-    /// "fill the frame, crop the excess" look as `StateFlagImage`'s
-    /// `.scaledToFill()`), or a neutral placeholder tint while the flag is
-    /// still loading. `progress` (0...1, from `stateLevelProgress`) is baked
-    /// into the style's own opacity so this layer crossfades in as the
-    /// district layer crossfades out, rather than popping in at full
-    /// strength.
-    private func stateFillStyle(for boundary: MapBoundary, progress: Double) -> AnyShapeStyle {
-        guard let image = stateFlagImages[boundary.state],
-              let pixelSize = stateFlagPixelSizes[boundary.state],
-              pixelSize.width > 0, pixelSize.height > 0,
-              screenPointsPerMapUnit > 0
-        else {
-            return AnyShapeStyle(Color.secondary.opacity(0.25 * progress))
-        }
-        let span = mapUnitSpan(for: boundary)
-        let boxWidth = span.width * screenPointsPerMapUnit
-        let boxHeight = span.height * screenPointsPerMapUnit
-        guard boxWidth > 0, boxHeight > 0 else {
-            return AnyShapeStyle(Color.secondary.opacity(0.25 * progress))
-        }
-        let scale = max(boxWidth / pixelSize.width, boxHeight / pixelSize.height)
-        return AnyShapeStyle(ImagePaint(image: image, scale: CGFloat(scale)).opacity(progress))
-    }
-
-    /// Loads and caches a state's flag the first time it's needed for the
-    /// state-level fill, recording its pixel size so `stateFillStyle(for:)`
-    /// can size the fill to cover the state's polygon.
-    private func loadFlagImageIfNeeded(for state: String) {
-        guard stateFlagImages[state] == nil, !loadingFlagStates.contains(state),
-              let url = StateFlagDirectory.flagURL(forState: state)
-        else { return }
-        loadingFlagStates.insert(state)
-        Task {
-            defer { loadingFlagStates.remove(state) }
-            guard let platformImage = await ImageCache.shared.image(for: url) else { return }
-            #if canImport(UIKit)
-            stateFlagImages[state] = Image(uiImage: platformImage)
-            #elseif canImport(AppKit)
-            stateFlagImages[state] = Image(nsImage: platformImage)
-            #endif
-            stateFlagPixelSizes[state] = platformImage.size
-        }
-    }
-
-    /// The boundary matching a representative's state and district, if its
-    /// geometry has loaded.
+    /// The boundary matching a representative's state and district, if loaded.
     private func districtBoundary(for rep: Representative) -> MapBoundary? {
-        let key = districtKey(state: rep.state, district: rep.district)
-        return districtBoundaries.first { districtKey(state: $0.state, district: $0.district) == key }
-    }
-
-    /// The point at which to pin a representative: the geometric middle of
-    /// their district, so members are spread across the map rather than
-    /// clustered at their Washington office.
-    private func districtCenter(for rep: Representative) -> CLLocationCoordinate2D? {
-        districtBoundary(for: rep)?.centroid
+        let key = Self.districtKey(state: rep.state, district: rep.district)
+        return districtBoundaries.first { Self.districtKey(state: $0.state, district: $0.district) == key }
     }
 
     /// The boundary of the user's own district, i.e. their House member's
@@ -505,9 +189,19 @@ struct DistrictMapView: View {
         mappable.first.flatMap(districtBoundary(for:))
     }
 
-    /// A region tightly framing a district's full extent (with a little
-    /// padding), rather than the tight "current position" zoom MapKit's
-    /// stock location button defaults to.
+    /// The region the recenter button (and initial auto-center) targets:
+    /// framing the user's whole district, falling back to a metro-wide box.
+    private var recenterRegion: MKCoordinateRegion? {
+        if let boundary = userDistrictBoundary {
+            return region(for: boundary)
+        }
+        if let userCoordinate {
+            return wideRegion(centeredOn: userCoordinate)
+        }
+        return nil
+    }
+
+    /// A region tightly framing a district's full extent, with a little padding.
     private func region(for boundary: MapBoundary) -> MKCoordinateRegion {
         let points = boundary.rings.flatMap { $0 }
         guard let minLat = points.map(\.latitude).min(),
@@ -528,9 +222,7 @@ struct DistrictMapView: View {
         return MKCoordinateRegion(center: center, span: span)
     }
 
-    /// A coarse, roughly metro-area-wide region around a coordinate — used to
-    /// get the map pointed at the right place immediately, before the precise
-    /// district-fit region (see `region(for:)`) is ready.
+    /// A coarse, roughly metro-area-wide region around a coordinate.
     private func wideRegion(centeredOn coordinate: CLLocationCoordinate2D) -> MKCoordinateRegion {
         MKCoordinateRegion(
             center: coordinate,
@@ -538,44 +230,22 @@ struct DistrictMapView: View {
         )
     }
 
-    /// Frames the user's district edge-to-edge the first time both their
-    /// representative and the district geometry are available, so the map
-    /// opens already centered on home rather than on MapKit's generic
-    /// default view. Only fires once — after that, the user's own panning
-    /// and zooming takes over.
+    /// Frames the user's district the first time both their representative and
+    /// the district geometry are available, so the map settles on home. Only
+    /// fires once — after that, the user's own panning takes over.
     private func centerOnUserDistrictIfNeeded() {
-        guard !hasCenteredOnUserDistrict, let boundary = userDistrictBoundary else { return }
+        guard !hasCenteredOnUserDistrict, userDistrictBoundary != nil else { return }
         hasCenteredOnUserDistrict = true
         isCenteredOnUserDistrict = true
-        position = .region(region(for: boundary))
+        recenterTrigger += 1
     }
 
-    /// Whether a camera region is still roughly framing the user's district,
-    /// i.e. close enough to what `recenterButton` last set that panning or
-    /// zooming hasn't meaningfully moved away from it yet.
-    private func isRegion(_ region: MKCoordinateRegion, centeredOn boundary: MapBoundary?) -> Bool {
-        guard let boundary else { return false }
-        let target = self.region(for: boundary)
-        let latTolerance = target.span.latitudeDelta * 0.25
-        let lonTolerance = target.span.longitudeDelta * 0.25
-        return abs(region.center.latitude - target.center.latitude) < latTolerance
-            && abs(region.center.longitude - target.center.longitude) < lonTolerance
-    }
-
-    /// Recenters on the user's district — framing the whole district rather
-    /// than zooming to their exact position, since the district (not the
-    /// neighborhood) is what's relevant here. Falls back to the stock
-    /// "current location" behavior if the district geometry isn't loaded yet.
+    /// Recenters on the user's district — framing the whole district rather than
+    /// zooming to their exact position, since the district is what's relevant.
     private var recenterButton: some View {
         Button {
-            withAnimation {
-                isCenteredOnUserDistrict = true
-                if let boundary = userDistrictBoundary {
-                    position = .region(region(for: boundary))
-                } else {
-                    position = .userLocation(fallback: .automatic)
-                }
-            }
+            isCenteredOnUserDistrict = true
+            recenterTrigger += 1
         } label: {
             Image(systemName: isCenteredOnUserDistrict ? "location.fill" : "location")
                 .font(.system(size: 17, weight: .medium))
@@ -587,15 +257,705 @@ struct DistrictMapView: View {
         .animation(.easeInOut(duration: 0.2), value: isCenteredOnUserDistrict)
     }
 
-    /// The House member who represents a given district, if any is on file
-    /// (e.g. a non-voting delegate's district may have no match). Looked up
-    /// nationwide so every district's sheet shows its own representative, not
-    /// just the user's home district.
+    /// The House member who represents a given district, if any is on file.
     private func representative(for boundary: MapBoundary) -> Representative? {
-        let key = districtKey(state: boundary.state, district: boundary.district)
-        return nationalHouseDirectory.members.first { districtKey(state: $0.state, district: $0.district) == key }
+        let key = Self.districtKey(state: boundary.state, district: boundary.district)
+        return nationalHouseDirectory.members.first { Self.districtKey(state: $0.state, district: $0.district) == key }
     }
 }
+
+/// Party fill colors, shared between the map overlays and the detail sheets so
+/// the swatch on a district's sheet matches its fill on the map.
+enum DistrictMapPalette {
+    static func color(for party: Party, dark: Bool) -> Color {
+        guard dark else { return party.color }
+        switch party {
+        case .democrat: return Color(red: 0.40, green: 0.66, blue: 1.0)
+        case .republican: return Color(red: 1.0, green: 0.40, blue: 0.38)
+        case .independent: return party.color
+        }
+    }
+}
+
+#if canImport(UIKit)
+
+// MARK: - MKMapView bridge
+
+/// Wraps an `MKMapView` and feeds it the district/state geometry as overlays.
+/// The heavy lifting (culling, tiling, redraw) is MapKit's; this type only
+/// rebuilds overlays when the underlying data actually changes and nudges the
+/// crossfade + camera in `updateUIView`.
+struct DistrictMapRepresentable: UIViewRepresentable {
+    let districtBoundaries: [MapBoundary]
+    let stateBoundaries: [MapBoundary]
+    let partyByDistrict: [String: Party]
+    let mappable: [Representative]
+    let colorSchemeIsDark: Bool
+    let initialRegion: MKCoordinateRegion?
+    let recenterRegion: MKCoordinateRegion?
+    let recenterTrigger: Int
+    @Binding var selectedDistrict: MapBoundary?
+    @Binding var selectedState: MapBoundary?
+    @Binding var isCentered: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeUIView(context: Context) -> MKMapView {
+        let mapView = MKMapView()
+        mapView.delegate = context.coordinator
+
+        let config = MKStandardMapConfiguration(emphasisStyle: .muted)
+        config.pointOfInterestFilter = .excludingAll
+        config.showsTraffic = false
+        mapView.preferredConfiguration = config
+
+        mapView.showsUserLocation = true
+        mapView.showsCompass = true
+        mapView.pointOfInterestFilter = .excludingAll
+        mapView.setCameraBoundary(
+            MKMapView.CameraBoundary(coordinateRegion: DistrictMapView.cameraBoundsRegion),
+            animated: false
+        )
+        mapView.setCameraZoomRange(
+            MKMapView.CameraZoomRange(maxCenterCoordinateDistance: DistrictMapView.maxCenterDistance),
+            animated: false
+        )
+
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
+        tap.cancelsTouchesInView = false
+        tap.delegate = context.coordinator
+        mapView.addGestureRecognizer(tap)
+
+        return mapView
+    }
+
+    func updateUIView(_ mapView: MKMapView, context: Context) {
+        let coordinator = context.coordinator
+        coordinator.parent = self
+        coordinator.hostMapView = mapView
+
+        // Rebuild the polygon overlays only when the geometry, party roster, or
+        // color scheme changes — never on a camera move.
+        let overlaySignature = "\(districtBoundaries.count)-\(stateBoundaries.count)-\(partyByDistrict.count)-\(colorSchemeIsDark)"
+        if overlaySignature != coordinator.overlaySignature {
+            coordinator.overlaySignature = overlaySignature
+            coordinator.rebuildOverlays(on: mapView)
+        }
+
+        // Rebuild annotations only when the pinned members change.
+        let annotationSignature = "\(mappable.count)-\(districtBoundaries.count)-\(stateBoundaries.count)"
+        if annotationSignature != coordinator.annotationSignature {
+            coordinator.annotationSignature = annotationSignature
+            coordinator.rebuildAnnotations(on: mapView)
+        }
+
+        if let initialRegion, !coordinator.didApplyInitialRegion {
+            coordinator.didApplyInitialRegion = true
+            mapView.setRegion(initialRegion, animated: false)
+        }
+
+        if recenterTrigger != coordinator.lastRecenterTrigger {
+            coordinator.lastRecenterTrigger = recenterTrigger
+            if let recenterRegion {
+                mapView.setRegion(recenterRegion, animated: true)
+            }
+        }
+    }
+
+    // MARK: Coordinator
+
+    final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate {
+        var parent: DistrictMapRepresentable
+
+        // Change-tracking so `updateUIView` only does real work when needed.
+        var overlaySignature = ""
+        var annotationSignature = ""
+        var didApplyInitialRegion = false
+        var lastRecenterTrigger = 0
+
+        /// 0 at district-level zoom, 1 once fully zoomed out to state level.
+        private var progress: Double = 0
+        private static let stateLevelLowerSpan: Double = 20.0
+        private static let stateLevelUpperSpan: Double = 22.0
+
+        /// Roles keyed by overlay identity, so `rendererFor` knows how to style
+        /// each overlay MapKit asks it to draw.
+        private enum Role {
+            case fill(Party)
+            case stateOutline
+        }
+        private var overlayRoles: [ObjectIdentifier: Role] = [:]
+        private var renderers: [ObjectIdentifier: MKOverlayRenderer] = [:]
+        /// Renderers whose alpha tracks the district layer (fade out on zoom-out).
+        private var districtFadeRenderers: [MKOverlayRenderer] = []
+        /// Renderers whose alpha tracks the flag layer (fade *in* on zoom-out).
+        private var flagFadeRenderers: [MKOverlayRenderer] = []
+        /// Pre-clipped flag bitmaps keyed by state, kept so they survive an overlay
+        /// rebuild (color-scheme change) without re-clipping.
+        private var clippedFlags: [String: ClippedFlag] = [:]
+        /// Each state's flag as a live map overlay, so it's projected by MapKit
+        /// exactly like the district and state-border polygons — glued to the map,
+        /// no wobble. Kept keyed by state so a color-scheme rebuild can re-add them.
+        private var flagOverlays: [String: FlagOverlay] = [:]
+        fileprivate weak var hostMapView: MKMapView?
+        private var loadingFlagStates: Set<String> = []
+        private var didPrefetchFlags = false
+
+        /// Retained SwiftUI hosts for the portrait pins, keyed by annotation, so
+        /// the hosting controllers outlive `viewFor` and aren't deallocated.
+        private var hostingControllers: [ObjectIdentifier: UIViewController] = [:]
+
+        init(_ parent: DistrictMapRepresentable) {
+            self.parent = parent
+        }
+
+        // MARK: Overlays
+
+        func rebuildOverlays(on mapView: MKMapView) {
+            mapView.removeOverlays(mapView.overlays)
+            overlayRoles.removeAll()
+            renderers.removeAll()
+            districtFadeRenderers.removeAll()
+            flagFadeRenderers.removeAll()
+            flagOverlays.removeAll()
+
+            // District fills grouped by party — three multipolygons instead of
+            // ~435 individual overlays.
+            // District fills grouped by party. Each district's thin outline is drawn
+            // by the fill renderer's stroke (below) rather than a separate 435-polygon
+            // overlay — one fewer heavy per-tile draw pass, so tiles fill in faster
+            // while panning.
+            let tolerance = Self.overlaySimplifyTolerance
+            var byParty: [Party: [MKPolygon]] = [:]
+            for boundary in parent.districtBoundaries {
+                guard let party = parent.partyByDistrict[
+                    DistrictMapView.districtKey(state: boundary.state, district: boundary.district)
+                ] else { continue }
+                byParty[party, default: []].append(contentsOf: Self.polygons(for: boundary, simplifyTolerance: tolerance))
+            }
+            for (party, polygons) in byParty where !polygons.isEmpty {
+                let overlay = MKMultiPolygon(polygons)
+                overlayRoles[ObjectIdentifier(overlay)] = .fill(party)
+                mapView.addOverlay(overlay, level: .aboveLabels)
+            }
+
+            // Re-add the flag overlays (below the state border, above the fills) so
+            // they survive a color-scheme rebuild. Each is a `.aboveRoads` overlay
+            // while everything else is `.aboveLabels`, so the state borders always
+            // draw over the flags.
+            for (state, flag) in clippedFlags {
+                addFlagOverlay(flag, for: state, on: mapView)
+            }
+
+            // Heavier state outline, on top and always visible at both zooms — a
+            // MapKit overlay, so it's projected with the map and never wobbles.
+            let statePolygons = parent.stateBoundaries.flatMap {
+                Self.polygons(for: $0, simplifyTolerance: tolerance)
+            }
+            if !statePolygons.isEmpty {
+                let overlay = MKMultiPolygon(statePolygons)
+                overlayRoles[ObjectIdentifier(overlay)] = .stateOutline
+                mapView.addOverlay(overlay, level: .aboveLabels)
+            }
+        }
+
+        /// Tolerance (in degrees) for simplifying the boundary rings used for the
+        /// map overlays — enough to strip the dense, near-collinear vertices in the
+        /// Census data that make per-tile drawing slow, while staying crisp even at
+        /// district-level zoom. Hit-testing and the detail-sheet thumbnails keep the
+        /// full-resolution rings; only the drawn overlays are simplified.
+        private static let overlaySimplifyTolerance: Double = 0.005
+
+        /// Builds the MapKit polygons for a boundary, optionally simplifying each
+        /// ring (Douglas–Peucker) to cut vertex count. Flags pass tolerance 0 so
+        /// their one-time clip stays sharp; the districts/states simplify.
+        nonisolated private static func polygons(for boundary: MapBoundary, simplifyTolerance: Double = 0) -> [MKPolygon] {
+            boundary.rings.compactMap { ring in
+                guard ring.count > 2 else { return nil }
+                let points = simplifyTolerance > 0 ? simplify(ring, tolerance: simplifyTolerance) : ring
+                guard points.count > 2 else { return nil }
+                return MKPolygon(coordinates: points, count: points.count)
+            }
+        }
+
+        /// Douglas–Peucker simplification of a coordinate ring. Longitude/latitude
+        /// are treated as planar here — fine at these tolerances for thinning
+        /// vertices. Endpoints are always kept.
+        nonisolated private static func simplify(_ points: [CLLocationCoordinate2D], tolerance: Double) -> [CLLocationCoordinate2D] {
+            guard points.count > 2 else { return points }
+            let end = points.count - 1
+            var dmax = 0.0
+            var index = 0
+            for i in 1..<end {
+                let d = perpendicularDistance(points[i], lineStart: points[0], lineEnd: points[end])
+                if d > dmax { index = i; dmax = d }
+            }
+            if dmax > tolerance {
+                let left = simplify(Array(points[0...index]), tolerance: tolerance)
+                let right = simplify(Array(points[index...end]), tolerance: tolerance)
+                return left.dropLast() + right
+            }
+            return [points[0], points[end]]
+        }
+
+        nonisolated private static func perpendicularDistance(
+            _ point: CLLocationCoordinate2D,
+            lineStart: CLLocationCoordinate2D,
+            lineEnd: CLLocationCoordinate2D
+        ) -> Double {
+            let dx = lineEnd.longitude - lineStart.longitude
+            let dy = lineEnd.latitude - lineStart.latitude
+            let lengthSquared = dx * dx + dy * dy
+            guard lengthSquared > 0 else {
+                let px = point.longitude - lineStart.longitude
+                let py = point.latitude - lineStart.latitude
+                return (px * px + py * py).squareRoot()
+            }
+            let numerator = abs(
+                dy * point.longitude - dx * point.latitude
+                    + lineEnd.longitude * lineStart.latitude
+                    - lineEnd.latitude * lineStart.longitude
+            )
+            return numerator / lengthSquared.squareRoot()
+        }
+
+        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            let oid = ObjectIdentifier(overlay)
+            if let existing = renderers[oid] { return existing }
+
+            // Flags are their own overlay type: a renderer that draws the state's
+            // pre-clipped bitmap. Its alpha fades in as the map zooms out.
+            if let flagOverlay = overlay as? FlagOverlay {
+                let r = FlagOverlayRenderer(flagOverlay: flagOverlay)
+                r.alpha = CGFloat(progress)
+                renderers[oid] = r
+                flagFadeRenderers.append(r)
+                return r
+            }
+
+            guard let role = overlayRoles[oid] else { return MKOverlayRenderer(overlay: overlay) }
+
+            let renderer: MKOverlayRenderer
+            switch role {
+            case .fill(let party):
+                let r = MKMultiPolygonRenderer(multiPolygon: overlay as! MKMultiPolygon)
+                r.fillColor = Self.partyUIColor(party, dark: parent.colorSchemeIsDark).withAlphaComponent(0.4)
+                // The per-district outline is this renderer's stroke, so there's no
+                // separate outline overlay to redraw per tile.
+                r.strokeColor = UIColor.secondaryLabel.withAlphaComponent(0.5)
+                r.lineWidth = 1
+                r.alpha = CGFloat(1 - progress)
+                districtFadeRenderers.append(r)
+                renderer = r
+            case .stateOutline:
+                let r = MKMultiPolygonRenderer(multiPolygon: overlay as! MKMultiPolygon)
+                r.fillColor = nil
+                r.strokeColor = UIColor.label.withAlphaComponent(0.85)
+                r.lineWidth = 2
+                r.alpha = 1
+                renderer = r
+            }
+            renderers[oid] = renderer
+            return renderer
+        }
+
+        private static func partyUIColor(_ party: Party, dark: Bool) -> UIColor {
+            UIColor(DistrictMapPalette.color(for: party, dark: dark))
+        }
+
+        // MARK: Flag loading
+
+        /// Kicks off loading every state's flag at once. Called when the map
+        /// first enters state-level zoom so all flags are fetched (and cached)
+        /// concurrently up front, rather than each one waiting until its state
+        /// scrolls into view and only then starting a fresh network fetch — the
+        /// latter is what made flags lag in over several seconds while panning.
+        private func prefetchFlags() {
+            guard !didPrefetchFlags, !parent.stateBoundaries.isEmpty else { return }
+            didPrefetchFlags = true
+            for boundary in parent.stateBoundaries {
+                loadFlagIfNeeded(for: boundary)
+            }
+        }
+
+        /// Bitmap resolution for each state's pre-clipped flag, sized by the state's
+        /// geographic extent so every flag has consistent on-screen sharpness rather
+        /// than a fixed longest edge (which made large states upscale and look
+        /// blocky while tiny states were over-sampled). Kept modest so each flag
+        /// tile blits fast — large bitmaps are the main cost that leaves flags
+        /// un-rendered when panning quickly.
+        private static let flagPixelsPerMapPoint: CGFloat = 1.0e-4
+        private static let flagMaxPixelDimension: CGFloat = 768
+
+        private func loadFlagIfNeeded(for boundary: MapBoundary) {
+            let state = boundary.state
+            guard clippedFlags[state] == nil, !loadingFlagStates.contains(state) else { return }
+            loadingFlagStates.insert(state)
+            Task { @MainActor in
+                defer { loadingFlagStates.remove(state) }
+                guard let flag = await Self.loadClippedFlag(for: boundary) else { return }
+                clippedFlags[state] = flag
+                if let mapView = hostMapView {
+                    addFlagOverlay(flag, for: state, on: mapView)
+                }
+            }
+        }
+
+        /// Loads a state's flag — bundled asset preferred, network the fallback —
+        /// and rasterizes it clipped to the state's outline, entirely off the main
+        /// thread. The single rasterization both downsamples and clips, so the flag
+        /// layer's `contents` is a finished bitmap the GPU composites directly.
+        private static func loadClippedFlag(for boundary: MapBoundary) async -> ClippedFlag? {
+            let state = boundary.state
+            let maxDimension = flagMaxPixelDimension
+            // Bundled path: look up and clip entirely off the main thread.
+            if let flag = await Task.detached(priority: .userInitiated, operation: {
+                () -> ClippedFlag? in
+                guard let image = StateFlagDirectory.bundledImage(forState: state) else { return nil }
+                return Self.clippedFlag(for: boundary, flag: image, maxPixelDimension: maxDimension)
+            }).value {
+                return flag
+            }
+            // Network fallback for any state without a bundled flag.
+            guard let url = StateFlagDirectory.flagURL(forState: state),
+                  let image = await ImageCache.shared.image(for: url) else { return nil }
+            return await Task.detached(priority: .userInitiated) {
+                Self.clippedFlag(for: boundary, flag: image, maxPixelDimension: maxDimension)
+            }.value
+        }
+
+        /// Rasterizes `flag` aspect-filled and clipped to `boundary`'s outline into
+        /// a single premultiplied bitmap sized to the state's bounding box (longest
+        /// edge `maxPixelDimension`). Runs once per state, off the main thread, so
+        /// the layer's `contents` is a finished, upright bitmap. Returns it paired
+        /// with its bounding `MKMapRect` for positioning on the map.
+        nonisolated private static func clippedFlag(for boundary: MapBoundary, flag: PlatformImage, maxPixelDimension: CGFloat) -> ClippedFlag? {
+            let polys = polygons(for: boundary)
+            guard !polys.isEmpty else { return nil }
+
+            // Bounding rect from the raw points. Alaska crosses the antimeridian —
+            // its Aleutians sit near the east edge of MKMapPoint space while the
+            // mainland is far west — so a naive union spans almost the whole globe.
+            // Detect that (span > half the world) and re-map the wrapped points to
+            // negative x so the state stays contiguous.
+            let worldWidth = MKMapRect.world.size.width
+            var minX = Double.greatestFiniteMagnitude, maxX = -Double.greatestFiniteMagnitude
+            var minY = Double.greatestFiniteMagnitude, maxY = -Double.greatestFiniteMagnitude
+            for polygon in polys {
+                let r = polygon.boundingMapRect
+                minX = min(minX, r.minX); maxX = max(maxX, r.maxX)
+                minY = min(minY, r.minY); maxY = max(maxY, r.maxY)
+            }
+            let wraps = (maxX - minX) > worldWidth / 2
+            if wraps {
+                minX = .greatestFiniteMagnitude; maxX = -Double.greatestFiniteMagnitude
+                for polygon in polys {
+                    let pts = polygon.points()
+                    for i in 0..<polygon.pointCount {
+                        let x = pts[i].x > worldWidth / 2 ? pts[i].x - worldWidth : pts[i].x
+                        minX = min(minX, x); maxX = max(maxX, x)
+                    }
+                }
+            }
+            let bounding = MKMapRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+            let mapW = bounding.size.width, mapH = bounding.size.height
+            guard mapW > 0, mapH > 0 else { return nil }
+
+            // Density-based, but never larger than the cap for a huge state.
+            let scale = min(Self.flagPixelsPerMapPoint, maxPixelDimension / max(mapW, mapH))
+            let pxW = max(1, CGFloat((mapW * scale).rounded()))
+            let pxH = max(1, CGFloat((mapH * scale).rounded()))
+
+            // Clip path in the bitmap's top-left-origin space. MKMapPoint y grows
+            // southward — the same direction as the bitmap's y — so the flag comes
+            // out upright.
+            let path = CGMutablePath()
+            for polygon in polys {
+                let count = polygon.pointCount
+                guard count > 2 else { continue }
+                let mapPoints = polygon.points()
+                var bitmapPoints = [CGPoint]()
+                bitmapPoints.reserveCapacity(count)
+                for i in 0..<count {
+                    let mp = mapPoints[i]
+                    let x = (wraps && mp.x > worldWidth / 2) ? mp.x - worldWidth : mp.x
+                    bitmapPoints.append(CGPoint(
+                        x: (x - bounding.minX) / mapW * Double(pxW),
+                        y: (mp.y - bounding.minY) / mapH * Double(pxH)
+                    ))
+                }
+                path.addLines(between: bitmapPoints)
+                path.closeSubpath()
+            }
+
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            format.opaque = false
+            let bitmap = UIGraphicsImageRenderer(size: CGSize(width: pxW, height: pxH), format: format).image { ctx in
+                let cg = ctx.cgContext
+                cg.addPath(path)
+                cg.clip()
+                // Aspect-fill the flag into the bounding box.
+                let iw = flag.size.width, ih = flag.size.height
+                guard iw > 0, ih > 0 else { return }
+                let fill = max(pxW / iw, pxH / ih)
+                let drawSize = CGSize(width: iw * fill, height: ih * fill)
+                flag.draw(in: CGRect(
+                    x: (pxW - drawSize.width) / 2,
+                    y: (pxH - drawSize.height) / 2,
+                    width: drawSize.width,
+                    height: drawSize.height
+                ))
+            }
+            guard let cgImage = bitmap.cgImage else { return nil }
+            return ClippedFlag(mapRect: bounding, image: cgImage)
+        }
+
+        // MARK: Flag overlays
+
+        /// Adds (or replaces) a state's flag as a map overlay. It's placed at the
+        /// `.aboveRoads` level while the fills, district outlines, and state border
+        /// all sit at `.aboveLabels`, so the flag draws above the base map but below
+        /// the black state border — the border reads as the seam between flags. The
+        /// renderer's alpha (set in `updateProgress`) is the crossfade.
+        private func addFlagOverlay(_ flag: ClippedFlag, for state: String, on mapView: MKMapView) {
+            if let existing = flagOverlays[state] {
+                renderers.removeValue(forKey: ObjectIdentifier(existing))
+                mapView.removeOverlay(existing)
+            }
+            let overlay = FlagOverlay(flag: flag, state: state)
+            flagOverlays[state] = overlay
+            mapView.addOverlay(overlay, level: .aboveRoads)
+        }
+
+        // MARK: Annotations
+
+        func rebuildAnnotations(on mapView: MKMapView) {
+            let stale = mapView.annotations.filter { !($0 is MKUserLocation) }
+            mapView.removeAnnotations(stale)
+            hostingControllers.removeAll()
+
+            // The user's own House delegation, pinned at the district's middle.
+            for rep in parent.mappable {
+                guard let boundary = parent.districtBoundaries.first(where: {
+                    DistrictMapView.districtKey(state: $0.state, district: $0.district)
+                        == DistrictMapView.districtKey(state: rep.state, district: rep.district)
+                }) else { continue }
+                mapView.addAnnotation(RepresentativeAnnotation(representative: rep, coordinate: boundary.centroid))
+            }
+
+            // Governors, pinned at each state's middle (shown when zoomed out).
+            for boundary in parent.stateBoundaries {
+                if let governor = GovernorDirectory.governor(forState: boundary.state) {
+                    mapView.addAnnotation(GovernorAnnotation(governor: governor, coordinate: boundary.centroid))
+                }
+            }
+        }
+
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            if annotation is MKUserLocation { return nil }
+            if let rep = annotation as? RepresentativeAnnotation {
+                return portraitView(
+                    for: annotation, on: mapView, alpha: CGFloat(1 - progress),
+                    content: AnyView(RepresentativePortrait(representative: rep.representative, size: 40, style: .outline))
+                )
+            }
+            if let gov = annotation as? GovernorAnnotation {
+                return portraitView(
+                    for: annotation, on: mapView, alpha: CGFloat(progress),
+                    content: AnyView(GovernorPortrait(governor: gov.governor, size: 40, style: .outline))
+                )
+            }
+            return nil
+        }
+
+        private func portraitView(for annotation: MKAnnotation, on mapView: MKMapView, alpha: CGFloat, content: AnyView) -> MKAnnotationView {
+            let identifier = "portrait"
+            let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier)
+                ?? MKAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+            view.annotation = annotation
+            view.subviews.forEach { $0.removeFromSuperview() }
+
+            let host = UIHostingController(rootView: content)
+            host.view.backgroundColor = .clear
+            host.view.frame = CGRect(x: 0, y: 0, width: 40, height: 40)
+            view.frame = host.view.frame
+            view.centerOffset = .zero
+            view.addSubview(host.view)
+            view.alpha = alpha
+            hostingControllers[ObjectIdentifier(annotation)] = host
+            return view
+        }
+
+        // MARK: Camera / crossfade
+
+        func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            updateProgress(for: mapView.region, on: mapView)
+        }
+
+        func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            updateProgress(for: mapView.region, on: mapView)
+            updateCenteredState(for: mapView.region)
+        }
+
+        /// Recomputes the district↔state crossfade from the visible latitude
+        /// span and pushes the new alpha to the (cheap, scalar) renderer and
+        /// annotation properties — no geometry is rebuilt.
+        private func updateProgress(for region: MKCoordinateRegion, on mapView: MKMapView) {
+            let span = region.span.latitudeDelta
+            // NOTE: State-flag transition disabled for now — will reapproach in a
+            // later update. Skipping the prefetch keeps flags from being fetched
+            // and clipped while the fade-in below is commented out.
+            // Start fetching every flag well before the crossfade begins, so
+            // they're cached by the time they'd fade in.
+            // if span > Self.stateLevelLowerSpan * 0.5 {
+            //     prefetchFlags()
+            // }
+            let newProgress: Double
+            if span <= Self.stateLevelLowerSpan {
+                newProgress = 0
+            } else if span >= Self.stateLevelUpperSpan {
+                newProgress = 1
+            } else {
+                newProgress = (span - Self.stateLevelLowerSpan) / (Self.stateLevelUpperSpan - Self.stateLevelLowerSpan)
+            }
+            guard abs(newProgress - progress) > 0.001 else { return }
+            progress = newProgress
+
+            for renderer in districtFadeRenderers {
+                renderer.alpha = CGFloat(1 - progress)
+            }
+            // NOTE: State-flag fade-in disabled for now — will reapproach in a
+            // later update. Keeping the flag renderers at their default alpha means
+            // no flags composite in as the district layer fades out.
+            // Fade the flags in as the district layer fades out. Setting a
+            // renderer's alpha composites its layer — no redraw, no re-clip — the
+            // same cheap crossfade the district overlays use.
+            // for renderer in flagFadeRenderers {
+            //     renderer.alpha = CGFloat(progress)
+            // }
+            for annotation in mapView.annotations {
+                guard let view = mapView.view(for: annotation) else { continue }
+                if annotation is RepresentativeAnnotation {
+                    view.alpha = CGFloat(1 - progress)
+                } else if annotation is GovernorAnnotation {
+                    view.alpha = CGFloat(progress)
+                }
+            }
+        }
+
+        /// Keeps the recenter button's icon in sync with whether the camera is
+        /// still roughly framing the user's district.
+        private func updateCenteredState(for region: MKCoordinateRegion) {
+            guard let target = parent.recenterRegion else { return }
+            let latTolerance = target.span.latitudeDelta * 0.25
+            let lonTolerance = target.span.longitudeDelta * 0.25
+            let centered = abs(region.center.latitude - target.center.latitude) < latTolerance
+                && abs(region.center.longitude - target.center.longitude) < lonTolerance
+            if centered != parent.isCentered {
+                parent.isCentered = centered
+            }
+        }
+
+        // MARK: Tap handling
+
+        @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+            guard let mapView = gesture.view as? MKMapView else { return }
+            let point = gesture.location(in: mapView)
+            let coordinate = mapView.convert(point, toCoordinateFrom: mapView)
+            // Past the midpoint of the crossfade, states read as the tappable
+            // layer — so route the tap to whichever layer is legible now.
+            if progress > 0.5 {
+                parent.selectedState = parent.stateBoundaries.first { $0.contains(coordinate) }
+            } else {
+                parent.selectedDistrict = parent.districtBoundaries.first { $0.contains(coordinate) }
+            }
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            true
+        }
+    }
+}
+
+/// A pin for one of the user's House representatives.
+final class RepresentativeAnnotation: NSObject, MKAnnotation {
+    let representative: Representative
+    let coordinate: CLLocationCoordinate2D
+    var title: String? { representative.name }
+
+    init(representative: Representative, coordinate: CLLocationCoordinate2D) {
+        self.representative = representative
+        self.coordinate = coordinate
+    }
+}
+
+/// A pin for a state's governor, shown when zoomed out to state level.
+final class GovernorAnnotation: NSObject, MKAnnotation {
+    let governor: Governor
+    let coordinate: CLLocationCoordinate2D
+    var title: String? { governor.name }
+
+    init(governor: Governor, coordinate: CLLocationCoordinate2D) {
+        self.governor = governor
+        self.coordinate = coordinate
+    }
+}
+
+/// One state's flag, pre-clipped to its outline (see `Coordinator.clippedFlag`),
+/// positioned by its bounding rect in map space. Drawn on the map by a
+/// `FlagOverlayRenderer`.
+struct ClippedFlag {
+    let mapRect: MKMapRect
+    let image: CGImage
+}
+
+/// A state's pre-clipped flag as a map overlay, so MapKit projects it exactly
+/// like the district and border polygons — glued to the map with no wobble.
+final class FlagOverlay: NSObject, MKOverlay {
+    let state: String
+    let image: CGImage
+    let boundingMapRect: MKMapRect
+    let coordinate: CLLocationCoordinate2D
+
+    init(flag: ClippedFlag, state: String) {
+        self.state = state
+        self.image = flag.image
+        self.boundingMapRect = flag.mapRect
+        self.coordinate = MKMapPoint(x: flag.mapRect.midX, y: flag.mapRect.midY).coordinate
+    }
+}
+
+/// Draws a `FlagOverlay`'s bitmap across its bounding rect. The bitmap is already
+/// clipped to the state's outline and oriented in map space (y grows south), so
+/// we only flip for Core Graphics' bottom-up context. Drawing the whole image at
+/// its full rect in every tile keeps edges pixel-aligned, so there are no seams.
+final class FlagOverlayRenderer: MKOverlayRenderer {
+    private let image: CGImage
+
+    init(flagOverlay: FlagOverlay) {
+        self.image = flagOverlay.image
+        super.init(overlay: flagOverlay)
+    }
+
+    override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
+        let rect = self.rect(for: overlay.boundingMapRect)
+        context.saveGState()
+        // Default (not .high) interpolation: it's markedly cheaper per tile, so
+        // flags render fast enough to keep up with quick panning. Drawing the whole
+        // image at its full rect in every tile keeps edges pixel-identical across
+        // tiles.
+        context.interpolationQuality = .default
+        context.translateBy(x: rect.minX, y: rect.maxY)
+        context.scaleBy(x: 1, y: -1)
+        context.draw(image, in: CGRect(x: 0, y: 0, width: rect.width, height: rect.height))
+        context.restoreGState()
+    }
+}
+
+#endif
 
 /// The sheet shown when a district is tapped: its name beside a copy of its
 /// outline, with the district's representative underneath.
@@ -717,11 +1077,8 @@ private struct DistrictDetailSheet: View {
     }
 }
 
-/// The sheet shown when a state is tapped at state-level zoom: its name
-/// beside a copy of its outline filled with its flag. Mirrors
-/// `DistrictDetailSheet`'s outline thumbnail — scaled to fit without
-/// squashing, via the same `DistrictOutlineShape` used for districts — so
-/// the two sheets read as one consistent design at either zoom level.
+/// The sheet shown when a state is tapped at state-level zoom: its name beside a
+/// copy of its outline filled with its flag.
 private struct StateDetailSheet: View {
     let boundary: MapBoundary
     let senators: [Representative]
@@ -885,8 +1242,8 @@ private struct StateDetailSheet: View {
 }
 
 /// Draws a district's boundary rings scaled to fit within the shape's rect,
-/// preserving aspect ratio — a small "thumbnail" copy of the outline shown
-/// on the map.
+/// preserving aspect ratio — a small "thumbnail" copy of the outline shown on
+/// the map.
 private struct DistrictOutlineShape: Shape {
     let rings: [[CLLocationCoordinate2D]]
 
@@ -899,13 +1256,10 @@ private struct DistrictOutlineShape: Shape {
               let rawMaxLon = points.map(\.longitude).max()
         else { return path }
 
-        // A boundary that crosses the antimeridian (e.g. Alaska, whose
-        // Aleutian Islands run past 180° into positive longitude) has points
-        // on both sides of the ±180 seam. Taking min/max of the raw
-        // longitudes then spans nearly the whole globe, squashing the real
-        // shape into a sliver on one side and a stray dot on the other.
-        // Unwrap by shifting negative longitudes up by 360° so the ring reads
-        // as one contiguous span instead of two far-apart clusters.
+        // A boundary that crosses the antimeridian (e.g. Alaska, whose Aleutian
+        // Islands run past 180° into positive longitude) has points on both
+        // sides of the ±180 seam. Unwrap by shifting negative longitudes up by
+        // 360° so the ring reads as one contiguous span.
         let crossesAntimeridian = rawMaxLon - rawMinLon > 180
         func unwrap(_ longitude: Double) -> Double {
             crossesAntimeridian && longitude < 0 ? longitude + 360 : longitude
@@ -913,9 +1267,9 @@ private struct DistrictOutlineShape: Shape {
         let minLon = crossesAntimeridian ? points.map { unwrap($0.longitude) }.min()! : rawMinLon
         let maxLon = crossesAntimeridian ? points.map { unwrap($0.longitude) }.max()! : rawMaxLon
 
-        // A degree of longitude spans less ground than a degree of latitude by
-        // a factor of cos(latitude). Without this correction the outline is
-        // stretched east-west and appears squashed vertically.
+        // A degree of longitude spans less ground than a degree of latitude by a
+        // factor of cos(latitude). Without this the outline is stretched
+        // east-west and appears squashed vertically.
         let midLat = (minLat + maxLat) / 2
         let lonScale = max(cos(midLat * .pi / 180), .ulpOfOne)
 
@@ -933,9 +1287,7 @@ private struct DistrictOutlineShape: Shape {
         }
 
         // Soften only the corners: run straight along each edge until a short
-        // distance from the vertex, then a small quad curve around it. Straight
-        // edges stay on their true path; `cornerCut` controls how much of each
-        // corner is rounded — small, so the effect is subtle.
+        // distance from the vertex, then a small quad curve around it.
         let cornerCut: CGFloat = 1.5
 
         for ring in rings {
@@ -949,8 +1301,8 @@ private struct DistrictOutlineShape: Shape {
                 continue
             }
 
-            // A point offset from `from` toward `to`, capped at half the
-            // segment length so short edges never overshoot into artifacts.
+            // A point offset from `from` toward `to`, capped at half the segment
+            // length so short edges never overshoot into artifacts.
             func offset(from a: CGPoint, toward b: CGPoint) -> CGPoint {
                 let dx = b.x - a.x, dy = b.y - a.y
                 let len = (dx * dx + dy * dy).squareRoot()
@@ -965,7 +1317,6 @@ private struct DistrictOutlineShape: Shape {
 
             path.move(to: entry(0))
             for i in 0..<count {
-                // Round the corner at vertex i, then run straight to the next.
                 path.addQuadCurve(to: exit(i), control: pts[i])
                 path.addLine(to: entry((i + 1) % count))
             }

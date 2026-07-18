@@ -13,12 +13,25 @@ struct StateFlagImage: View {
     let state: String
 
     var body: some View {
-        CachedAsyncImage(url: StateFlagDirectory.flagURL(forState: state)) { image in
-            image
+        if let bundled = StateFlagDirectory.bundledImage(forState: state) {
+            #if canImport(UIKit)
+            Image(uiImage: bundled)
                 .resizable()
                 .scaledToFill()
-        } placeholder: {
-            Rectangle().fill(.secondary.opacity(0.15))
+            #elseif canImport(AppKit)
+            Image(nsImage: bundled)
+                .resizable()
+                .scaledToFill()
+            #endif
+        } else {
+            // Fallback for any state without a bundled asset (e.g. a territory).
+            CachedAsyncImage(url: StateFlagDirectory.flagURL(forState: state)) { image in
+                image
+                    .resizable()
+                    .scaledToFill()
+            } placeholder: {
+                Rectangle().fill(.secondary.opacity(0.15))
+            }
         }
     }
 }
