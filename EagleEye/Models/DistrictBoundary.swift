@@ -29,7 +29,7 @@ struct MapBoundary: Identifiable {
     /// This boundary's bounding box in Mercator map-point space, precomputed
     /// so the map can cheaply cull boundaries that don't intersect the
     /// visible viewport instead of handing every one to MapKit every frame.
-    let boundingMapRect: MKMapRect
+    let boundingBox: MKMapRect
 
     /// The coarse geometry is simplified this aggressively (in degrees, ≈2km).
     /// Only ever drawn when zoomed far enough out that this is imperceptible.
@@ -41,17 +41,16 @@ struct MapBoundary: Identifiable {
         self.district = district
         self.rings = rings
         self.coarseRings = rings.map { BoundaryLoader.simplify($0, tolerance: Self.coarseTolerance) }
-        self.boundingMapRect = Self.boundingRect(of: rings)
+        self.boundingBox = Self.boundingRect(of: rings)
     }
 
     /// Union of the map-point bounding boxes of every vertex in every ring.
     private static func boundingRect(of rings: [[CLLocationCoordinate2D]]) -> MKMapRect {
         var rect = MKMapRect.null
         for ring in rings {
-            for coordinate in ring {
-                let point = MKMapPoint(coordinate)
-                rect = rect.union(MKMapRect(origin: point, size: MKMapSize(width: 0, height: 0)))
-            }
+            // MKPolygon natively calculates the boundingMapRect for us in highly optimized C
+            let polygon = MKPolygon(coordinates: ring, count: ring.count)
+            rect = rect.union(polygon.boundingMapRect)
         }
         return rect
     }
@@ -265,7 +264,11 @@ enum BoundaryLoader {
         var keep = [Bool](repeating: false, count: points.count)
         keep[0] = true
         keep[points.count - 1] = true
-        simplifySegment(points, 0, points.count - 1, tolerance, &keep)
+        
+        // Square the tolerance once up front
+        let toleranceSquared = tolerance * tolerance
+        
+        simplifySegment(points, 0, points.count - 1, toleranceSquared, &keep)
         return points.indices.compactMap { keep[$0] ? points[$0] : nil }
     }
 
@@ -273,29 +276,32 @@ enum BoundaryLoader {
         _ points: [CLLocationCoordinate2D],
         _ start: Int,
         _ end: Int,
-        _ tolerance: Double,
+        _ toleranceSquared: Double, // Now passing the squared tolerance
         _ keep: inout [Bool]
     ) {
         guard end > start + 1 else { return }
-        var maxDistance = 0.0
+        var maxDistanceSquared = 0.0
         var farthestIndex = start
+        
         for i in (start + 1)..<end {
-            let distance = perpendicularDistance(points[i], points[start], points[end])
-            if distance > maxDistance {
-                maxDistance = distance
+            let distanceSquared = perpendicularDistanceSquared(points[i], points[start], points[end])
+            if distanceSquared > maxDistanceSquared {
+                maxDistanceSquared = distanceSquared
                 farthestIndex = i
             }
         }
-        if maxDistance > tolerance {
+        
+        // Compare squared distance against squared tolerance
+        if maxDistanceSquared > toleranceSquared {
             keep[farthestIndex] = true
-            simplifySegment(points, start, farthestIndex, tolerance, &keep)
-            simplifySegment(points, farthestIndex, end, tolerance, &keep)
+            simplifySegment(points, start, farthestIndex, toleranceSquared, &keep)
+            simplifySegment(points, farthestIndex, end, toleranceSquared, &keep)
         }
     }
 
-    /// Distance from `point` to the line through `lineStart`/`lineEnd`, in
-    /// the same (degree) units as the coordinates.
-    private static func perpendicularDistance(
+    /// Squared distance from `point` to the line through `lineStart`/`lineEnd`.
+    /// Returning the squared value avoids expensive square root calculations during heavy recursion.
+    private static func perpendicularDistanceSquared(
         _ point: CLLocationCoordinate2D,
         _ lineStart: CLLocationCoordinate2D,
         _ lineEnd: CLLocationCoordinate2D
@@ -303,12 +309,16 @@ enum BoundaryLoader {
         let dx = lineEnd.longitude - lineStart.longitude
         let dy = lineEnd.latitude - lineStart.latitude
         let lengthSquared = dx * dx + dy * dy
+        
         guard lengthSquared > .ulpOfOne else {
             let ddx = point.longitude - lineStart.longitude
             let ddy = point.latitude - lineStart.latitude
-            return (ddx * ddx + ddy * ddy).squareRoot()
+            return ddx * ddx + ddy * ddy
         }
+        
         let cross = dx * (lineStart.latitude - point.latitude) - dy * (lineStart.longitude - point.longitude)
-        return abs(cross) / lengthSquared.squareRoot()
+        
+        // Return the squared result: (cross / sqrt(lengthSquared))^2 -> cross^2 / lengthSquared
+        return (cross * cross) / lengthSquared
     }
 }
