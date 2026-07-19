@@ -16,9 +16,9 @@
   - [x] Photos no longer seem to be loading for the representatives. Is this just because we are attempting to load 435 representatives in the map? How can we prioritize loading our representatives first, and then our fellow state representatives on the map, then neighboring states, and then all of them? Instead of 435 in one go
   - [ ] Add more information per district. Each district should display some basic information about the district, like the population count, top sectors/industry, top cities by population, top universties, and anything else relevant to the district. it should still show the representative. Feel free to split this into smaller tasks and add to-do list items under it. Right now the district detail section just shows the representative, but it should show more information. Is the informaiton below loaded in the backend? Wire it to the district detail sheet and display it if we have it in the backend.
     - [ ] In the district sheet, text should extend to the bottom of the district outline. the district outline should occupy a corner of the text instead of an column. this prevents text from extending into the area beneath it. the text should start where it does exactly, the the title and text start shouldnt move, but it should just take advantage of the space being claimed under the district outline
-    - [x] Show each district's total population (Census ACS estimate) in the district detail sheet
-    - [x] Show each district's top sectors/industries in the district detail sheet
-    - [x] Show each district's top cities by population in the district detail sheet
+    - [ ] Show each district's total population (Census ACS estimate) in the district detail sheet
+    - [ ] Show each district's top sectors/industries in the district detail sheet
+    - [ ] Show each district's top cities by population in the district detail sheet
     - [x] Show each district's top universities in the district detail sheet
       - [ ] Starting from the top university, discard the next university if it is less than 2/5 of the last universities size by pop
   - [x] Once a certain zoom level is reached, out to the state level, display the governors icons in the middle of the state. The state outline should be filled with the state flag instead of a single party color.
@@ -32,7 +32,7 @@
       - [x] Show a list of all House representatives for the state in the state-level detail sheet, below the senators
       - [x] Add total population, top sectors/industries, top cities, and top universities sections to the state-level detail sheet (new state-keyed data directories, mirroring the district ones)
   - [x] We currently dont need to see the rest of the world in our map. Is there a way to just load a map of america? Would that be better for performance? We should just spend computational energy rendering America
-  - [ ] Create a "toolbar" at the top of the map under the District maps title. this should have a "show icons" toggle as well as the recentering button on the right. the show icons toggle should toggle both district representative icons as well as governor icons
+  - [x] Create a "toolbar" at the top of the map under the District maps title. this should have a "show icons" toggle as well as the recentering button on the right. the show icons toggle should toggle both district representative icons as well as governor icons
   - [ ] Organize the map code into different files with clear purposes and outline a feature for adding state flags after being zoomed out, but dont implement it. Just add filler files for that task and keep hte current approach while cleaning up the files/organizing them. Keeping the project organized, modular, and maintainable is a priority.
 
 - [ ] For the representatives view, start loading their information immediately if none is found on disk upon app load. The user shouldnt have to open the representatives tab for the loading to start or to kickstart the image loading.

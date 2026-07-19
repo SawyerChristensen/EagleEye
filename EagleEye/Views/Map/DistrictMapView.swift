@@ -28,6 +28,7 @@ struct DistrictMapView: View {
     @State private var hasSetInitialRegion = false
     @State private var hasCenteredOnUserDistrict = false
     @State private var isCenteredOnUserDistrict = false
+    @State private var showIcons = true
     /// The region the map opens on: a rough metro-wide box around the user's
     /// coordinate, applied once so the map isn't pointed at MapKit's generic
     /// default view while boundaries load.
@@ -96,6 +97,7 @@ struct DistrictMapView: View {
                 initialRegion: initialRegion,
                 recenterRegion: recenterRegion,
                 recenterTrigger: recenterTrigger,
+                showIcons: showIcons,
                 selectedDistrict: $selectedDistrict,
                 selectedState: $selectedState,
                 isCentered: $isCenteredOnUserDistrict
@@ -103,8 +105,8 @@ struct DistrictMapView: View {
             .ignoresSafeArea()
             // The recenter control lives outside the ignored safe area so it
             // stays clear of the home indicator and nav bar.
-            .overlay(alignment: .bottomTrailing) {
-                recenterButton
+            .overlay(alignment: .topTrailing) {
+                glassToolbar
                     .padding()
             }
             .navigationTitle("District Map")
@@ -243,21 +245,39 @@ struct DistrictMapView: View {
         recenterTrigger += 1
     }
 
-    /// Recenters on the user's district — framing the whole district rather than
-    /// zooming to their exact position, since the district is what's relevant.
-    private var recenterButton: some View {
-        Button {
-            isCenteredOnUserDistrict = true
-            recenterTrigger += 1
-        } label: {
-            Image(systemName: isCenteredOnUserDistrict ? "location.fill" : "location")
-                .font(.system(size: 17, weight: .medium))
-                .frame(width: 38, height: 38)
+    /// A floating "liquid glass" toolbar for map controls.
+    private var glassToolbar: some View {
+        HStack(spacing: 20) {
+            Button {
+                withAnimation { showIcons.toggle() }
+            } label: {
+                Image(systemName: showIcons ? "person" : "person.slash")
+                    .font(.system(size: 20, weight: .semibold))
+                    .frame(width: 24, height: 24)
+            }
+            .foregroundStyle(showIcons ? Color.primary : Color.secondary)
+            .contentTransition(.symbolEffect(.replace))
+            
+            Divider()
+                .frame(height: 16)
+            
+            Button {
+                isCenteredOnUserDistrict = true
+                recenterTrigger += 1
+            } label: {
+                Image(systemName: isCenteredOnUserDistrict ? "location.fill" : "location")
+                    .font(.system(size: 20, weight: .semibold))
+                    .frame(width: 24, height: 24)
+            }
+            .foregroundStyle(Color.primary) //isCenteredOnUserDistrict ? Color.blue : Color.primary)
+            .contentTransition(.symbolEffect(.replace))
         }
-        .background(.ultraThinMaterial, in: Circle())
-        .overlay(Circle().strokeBorder(.separator, lineWidth: 0.5))
-        .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
-        .animation(.easeInOut(duration: 0.2), value: isCenteredOnUserDistrict)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial) // Liquid Glass effect
+        .clipShape(Capsule())
+        .overlay(Capsule().strokeBorder(.separator.opacity(0.4), lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.12), radius: 8, y: 4)
     }
 
     /// The House member who represents a given district, if any is on file.
@@ -298,6 +318,7 @@ struct DistrictMapRepresentable: UIViewRepresentable {
     let initialRegion: MKCoordinateRegion?
     let recenterRegion: MKCoordinateRegion?
     let recenterTrigger: Int
+    let showIcons: Bool
     @Binding var selectedDistrict: MapBoundary?
     @Binding var selectedState: MapBoundary?
     @Binding var isCentered: Bool
@@ -368,6 +389,11 @@ struct DistrictMapRepresentable: UIViewRepresentable {
                 mapView.setRegion(recenterRegion, animated: true)
             }
         }
+        
+        if showIcons != coordinator.lastShowIcons {
+            coordinator.lastShowIcons = showIcons
+            coordinator.updateAnnotationVisibility(on: mapView)
+        }
     }
 
     // MARK: Coordinator
@@ -380,6 +406,7 @@ struct DistrictMapRepresentable: UIViewRepresentable {
         var annotationSignature = ""
         var didApplyInitialRegion = false
         var lastRecenterTrigger = 0
+        var lastShowIcons: Bool?
         
         var arePinsVisible: Bool?
 
@@ -573,9 +600,9 @@ struct DistrictMapRepresentable: UIViewRepresentable {
         }*/
 
         // MARK: Annotations
-        private func updateAnnotationVisibility(on mapView: MKMapView) {
+        func updateAnnotationVisibility(on mapView: MKMapView) {
             let distance = mapView.camera.centerCoordinateDistance
-            let shouldShow = distance < 2_000_000
+            let shouldShow = parent.showIcons //&& distance < 2_000_000
 
             // Only run the animation block if the visibility state actually needs to change
             guard shouldShow != arePinsVisible else { return }
@@ -623,7 +650,14 @@ struct DistrictMapRepresentable: UIViewRepresentable {
                 ?? RepresentativePortraitAnnotationView(annotation: annotation, reuseIdentifier: RepresentativePortraitAnnotationView.reuseIdentifier)
             view.annotation = annotation
             view.configure(with: rep.representative)
-
+            
+            let shouldShow = parent.showIcons
+            view.alpha = shouldShow ? 1.0 : 0.0
+            if shouldShow { view.loadImageIfNeeded() }
+            
+            return view
+            
+            /*
             // Only fetch the portrait when the pin is actually visible. When
             // zoomed out the pins are hidden, so loading them just floods the
             // shared URL session with hundreds of requests for photos no one
@@ -631,7 +665,7 @@ struct DistrictMapRepresentable: UIViewRepresentable {
             let isZoomedIn = mapView.camera.centerCoordinateDistance < 2_000_000
             view.alpha = isZoomedIn ? 1.0 : 0.0
             if isZoomedIn { view.loadImageIfNeeded() }
-            return view
+            return view*/
         }
 
         // MARK: Camera
