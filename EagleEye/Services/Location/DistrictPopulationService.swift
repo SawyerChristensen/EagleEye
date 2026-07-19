@@ -34,6 +34,9 @@ struct DistrictPopulationService {
     /// congressional-district geography) or the API has no matching row.
     func population(state: String, district: Int) async throws -> Int? {
         guard let fips = CensusStateFIPS.byPostalCode[state] else { return nil }
+        // The Census Data API rejects keyless requests, so without a key there
+        // is nothing to fetch — leave the section empty rather than fail.
+        guard CensusAPIKey.isConfigured else { return nil }
         let districtParam = String(format: "%02d", district)
 
         var components = URLComponents(string: "https://api.census.gov/data/\(vintage)/acs/acs5")!
@@ -41,6 +44,7 @@ struct DistrictPopulationService {
             URLQueryItem(name: "get", value: "NAME,B01003_001E"),
             URLQueryItem(name: "for", value: "congressional district:\(districtParam)"),
             URLQueryItem(name: "in", value: "state:\(fips)"),
+            URLQueryItem(name: "key", value: CensusAPIKey.configured),
         ]
 
         let (data, response) = try await session.data(from: components.url!)

@@ -10,6 +10,14 @@
 
 import Foundation
 
+struct IndustryShare: Codable, Hashable {
+    /// The industry's category name (e.g. "Manufacturing").
+    let name: String
+    /// The industry's share of the district's employed civilian population,
+    /// as a fraction 0...1.
+    let share: Double
+}
+
 struct DistrictIndustryService {
     enum ServiceError: LocalizedError {
         case badResponse(Int)
@@ -30,12 +38,17 @@ struct DistrictIndustryService {
     private let vintage = 2022
 
     /// The employed civilian population's top industries in a congressional
-    /// district, most- to least-employing, or `nil` if the state has no FIPS
-    /// code on file (the territories, whose delegates' districts aren't part
-    /// of the ACS congressional-district geography) or the API has no
-    /// matching row. `limit` caps how many industries are returned.
-    func topIndustries(state: String, district: Int, limit: Int = 3) async throws -> [String]? {
+    /// district, most- to least-employing, each with its share of the
+    /// district's total employment — or `nil` if the state has no FIPS code
+    /// on file (the territories, whose delegates' districts aren't part of the
+    /// ACS congressional-district geography) or the API has no matching row.
+    /// `limit` caps how many industries are returned; the share is computed
+    /// against the full set of leaf industries, not just the returned top few.
+    func topIndustries(state: String, district: Int, limit: Int = 3) async throws -> [IndustryShare]? {
         guard let fips = CensusStateFIPS.byPostalCode[state] else { return nil }
+        // The Census Data API rejects keyless requests, so without a key there
+        // is nothing to fetch — leave the section empty rather than fail.
+        guard CensusAPIKey.isConfigured else { return nil }
         let districtParam = String(format: "%02d", district)
 
         var components = URLComponents(string: "https://api.census.gov/data/\(vintage)/acs/acs5/subject")!
@@ -43,6 +56,7 @@ struct DistrictIndustryService {
             URLQueryItem(name: "get", value: "NAME,\(Self.variables.map(\.code).joined(separator: ","))"),
             URLQueryItem(name: "for", value: "congressional district:\(districtParam)"),
             URLQueryItem(name: "in", value: "state:\(fips)"),
+            URLQueryItem(name: "key", value: CensusAPIKey.configured),
         ]
 
         let (data, response) = try await session.data(from: components.url!)
@@ -66,10 +80,13 @@ struct DistrictIndustryService {
         }
         guard !employedByIndustry.isEmpty else { return nil }
 
+        let totalEmployed = employedByIndustry.reduce(0) { $0 + $1.1 }
+        guard totalEmployed > 0 else { return nil }
+
         return employedByIndustry
             .sorted { $0.1 > $1.1 }
             .prefix(limit)
-            .map(\.0)
+            .map { IndustryShare(name: $0.0, share: Double($0.1) / Double(totalEmployed)) }
     }
 
     /// The leaf-level industry categories of Census table S2403 ("Industry

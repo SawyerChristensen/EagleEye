@@ -13,7 +13,7 @@ import Observation
 @MainActor
 @Observable
 final class DistrictIndustryDirectory {
-    private var cache: [String: [String]]
+    private var cache: [String: [IndustryShare]]
     private let service: DistrictIndustryService
 
     init(service: DistrictIndustryService = DistrictIndustryService()) {
@@ -23,7 +23,7 @@ final class DistrictIndustryDirectory {
 
     /// The cached top industries for a district, if it's already been
     /// fetched this app session or a previous one.
-    func cachedTopIndustries(state: String, district: Int) -> [String]? {
+    func cachedTopIndustries(state: String, district: Int) -> [IndustryShare]? {
         cache[key(state: state, district: district)]
     }
 
@@ -44,17 +44,19 @@ final class DistrictIndustryDirectory {
 
     // MARK: - Cache
 
-    private static let cacheKey = "cachedDistrictIndustries"
+    // Bumped to `…V2` when the cached shape changed from `[String]` labels to
+    // `[IndustryShare]`; the old key's data is simply ignored and refetched.
+    private static let cacheKey = "cachedDistrictIndustriesV2"
 
-    private static func saveCache(_ cache: [String: [String]]) {
+    private static func saveCache(_ cache: [String: [IndustryShare]]) {
         if let data = try? JSONEncoder().encode(cache) {
             UserDefaults.standard.set(data, forKey: cacheKey)
         }
     }
 
-    private static func loadCache() -> [String: [String]] {
+    private static func loadCache() -> [String: [IndustryShare]] {
         guard let data = UserDefaults.standard.data(forKey: cacheKey),
-              let cache = try? JSONDecoder().decode([String: [String]].self, from: data)
+              let cache = try? JSONDecoder().decode([String: [IndustryShare]].self, from: data)
         else { return [:] }
         return cache
     }

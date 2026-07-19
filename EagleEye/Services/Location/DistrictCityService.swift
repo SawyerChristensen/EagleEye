@@ -146,19 +146,23 @@ struct DistrictCityService {
         guard 200..<300 ~= http.statusCode else {
             throw ServiceError.badResponse(http.statusCode)
         }
-        guard let text = String(data: data, encoding: .utf8) else { return [:] }
+        // The PopEst bulk files are Latin-1 (accented place names) with CRLF
+        // line endings, so decode with an isoLatin1 fallback and split on any
+        // newline — a plain UTF-8 read fails outright, and splitting on "\n"
+        // alone leaves a trailing "\r" that breaks the last column's `Int`.
+        guard let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else { return [:] }
 
         var populationByPlace: [String: Int] = [:]
         // Columns: SUMLEV,STATE,COUNTY,PLACE,COUSUB,CONCIT,PRIMGEO_FLAG,
         // FUNCSTAT,NAME,STNAME,ESTIMATESBASE2020,POPESTIMATE2020,
         // POPESTIMATE2021,POPESTIMATE2022,POPESTIMATE2023
-        for line in text.split(separator: "\n").dropFirst() {
+        for line in text.split(whereSeparator: \.isNewline).dropFirst() {
             let fields = line.split(separator: ",", omittingEmptySubsequences: false)
             // SUMLEV 162 is a place's total population, independent of
             // county lines — the row we want, rather than the per-county
             // slices of a place that straddles a county boundary.
             guard fields.count >= 15, fields[0] == "162" else { continue }
-            guard let population = Int(fields[14]) else { continue }
+            guard let population = Int(fields[14].trimmingCharacters(in: .whitespaces)) else { continue }
             populationByPlace[String(fields[3])] = population
         }
         return populationByPlace

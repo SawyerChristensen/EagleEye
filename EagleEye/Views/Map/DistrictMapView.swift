@@ -3,17 +3,9 @@
 //  EagleEye
 //
 //  The right "Map" tab: colored congressional-district outlines across the US,
-//  fading to state flags + governor pins when zoomed out.
+//  fading to governor pins when zoomed out. State flags to be added in a future update
 //
-//  Rendered with a UIKit `MKMapView` wrapped in `DistrictMapRepresentable`
-//  rather than SwiftUI's declarative `Map`. The declarative `Map` rebuilds and
-//  re-diffs its entire `MapContent` tree every time the view body re-runs — and
-//  camera changes forced that on nearly every gesture frame — which is what made
-//  the old implementation stutter and drop district fills at the viewport edge.
-//  MKMapView takes the opposite approach: the ~435 district polygons are handed
-//  to it once as overlays, and MapKit owns viewport culling, tiling, level of
-//  detail, and per-tile redraw internally. Panning reuses cached tiles, so
-//  there are no holes and no per-frame geometry rebuild.
+//
 //
 
 import SwiftUI
@@ -50,6 +42,7 @@ struct DistrictMapView: View {
     @State private var nationalHouseDirectory = NationalHouseDirectory()
     @State private var nationalSenateDirectory = NationalSenateDirectory()
     @State private var populationDirectory = DistrictPopulationDirectory()
+    @State private var demographicsDirectory = DistrictDemographicsDirectory()
     @State private var industryDirectory = DistrictIndustryDirectory()
     @State private var cityDirectory = DistrictCityDirectory()
     @State private var universityDirectory = DistrictUniversityDirectory()
@@ -98,7 +91,7 @@ struct DistrictMapView: View {
                 districtBoundaries: districtBoundaries,
                 stateBoundaries: stateBoundaries,
                 partyByDistrict: partyByDistrictCache,
-                mappable: mappable,
+                allRepresentatives: nationalHouseDirectory.members,
                 colorSchemeIsDark: colorScheme == .dark,
                 initialRegion: initialRegion,
                 recenterRegion: recenterRegion,
@@ -117,22 +110,31 @@ struct DistrictMapView: View {
             .navigationTitle("District Map")
             .navigationBarTitleDisplayMode(.inline)
             .task {
+                print("🗺️ [Map] .task start — userCoordinate=\(String(describing: userCoordinate))")
                 if !hasSetInitialRegion, let userCoordinate {
                     hasSetInitialRegion = true
                     initialRegion = wideRegion(centeredOn: userCoordinate)
+                    print("🗺️ [Map] set initialRegion around \(userCoordinate)")
                 }
                 async let nationalHouseLoad: Void = nationalHouseDirectory.loadIfNeeded()
                 async let nationalSenateLoad: Void = nationalSenateDirectory.loadIfNeeded()
                 if districtBoundaries.isEmpty, stateBoundaries.isEmpty {
+                    print("🗺️ [Map] loading boundaries…")
                     async let districts = Task.detached(priority: .userInitiated) { BoundaryLoader.loadDistricts() }.value
                     async let states = Task.detached(priority: .userInitiated) { BoundaryLoader.loadStates() }.value
                     districtBoundaries = await districts
                     stateBoundaries = await states
+                    print("🗺️ [Map] boundaries loaded — districts=\(districtBoundaries.count) states=\(stateBoundaries.count)")
                     centerOnUserDistrictIfNeeded()
                 }
                 await nationalHouseLoad
                 await nationalSenateLoad
+                print("🗺️ [Map] directories loaded — house=\(nationalHouseDirectory.members.count)")
                 rebuildPartyByDistrictCache()
+                // Portraits load on demand: MapKit builds a pin's view only when
+                // it scrolls on screen, and CachedAsyncImage fetches then. No bulk
+                // prefetch — it just monopolized the shared URLSession's per-host
+                // connections and starved the photo the user actually tapped.
             }
             .onChange(of: representatives) { centerOnUserDistrictIfNeeded() }
             .onChange(of: nationalHouseDirectory.members) { _, _ in
@@ -144,6 +146,7 @@ struct DistrictMapView: View {
                     color: fillColor(for: boundary),
                     representative: representative(for: boundary),
                     populationDirectory: populationDirectory,
+                    demographicsDirectory: demographicsDirectory,
                     industryDirectory: industryDirectory,
                     cityDirectory: cityDirectory,
                     universityDirectory: universityDirectory
@@ -262,6 +265,7 @@ struct DistrictMapView: View {
         let key = Self.districtKey(state: boundary.state, district: boundary.district)
         return nationalHouseDirectory.members.first { Self.districtKey(state: $0.state, district: $0.district) == key }
     }
+
 }
 
 /// Party fill colors, shared between the map overlays and the detail sheets so
@@ -289,7 +293,7 @@ struct DistrictMapRepresentable: UIViewRepresentable {
     let districtBoundaries: [MapBoundary]
     let stateBoundaries: [MapBoundary]
     let partyByDistrict: [String: Party]
-    let mappable: [Representative]
+    let allRepresentatives: [Representative]
     let colorSchemeIsDark: Bool
     let initialRegion: MKCoordinateRegion?
     let recenterRegion: MKCoordinateRegion?
@@ -328,6 +332,7 @@ struct DistrictMapRepresentable: UIViewRepresentable {
         tap.delegate = context.coordinator
         mapView.addGestureRecognizer(tap)
 
+        print("🗺️ [Map] makeUIView done — delegate set, camera bounds applied")
         return mapView
     }
 
@@ -345,7 +350,7 @@ struct DistrictMapRepresentable: UIViewRepresentable {
         }
 
         // Rebuild annotations only when the pinned members change.
-        let annotationSignature = "\(mappable.count)-\(districtBoundaries.count)-\(stateBoundaries.count)"
+        let annotationSignature = "\(allRepresentatives.count)-\(districtBoundaries.count)-\(stateBoundaries.count)"
         if annotationSignature != coordinator.annotationSignature {
             coordinator.annotationSignature = annotationSignature
             coordinator.rebuildAnnotations(on: mapView)
@@ -353,6 +358,7 @@ struct DistrictMapRepresentable: UIViewRepresentable {
 
         if let initialRegion, !coordinator.didApplyInitialRegion {
             coordinator.didApplyInitialRegion = true
+            print("🗺️ [Map] applying initialRegion center=\(initialRegion.center) span=\(initialRegion.span)")
             mapView.setRegion(initialRegion, animated: false)
         }
 
@@ -374,6 +380,8 @@ struct DistrictMapRepresentable: UIViewRepresentable {
         var annotationSignature = ""
         var didApplyInitialRegion = false
         var lastRecenterTrigger = 0
+        
+        var arePinsVisible: Bool?
 
         /// Roles keyed by overlay identity, so `rendererFor` knows how to style
         /// each overlay MapKit asks it to draw.
@@ -398,10 +406,6 @@ struct DistrictMapRepresentable: UIViewRepresentable {
         private var loadingFlagStates: Set<String> = []
         private var didPrefetchFlags = false
 
-        /// Retained SwiftUI hosts for the portrait pins, keyed by annotation, so
-        /// the hosting controllers outlive `viewFor` and aren't deallocated.
-        private var hostingControllers: [ObjectIdentifier: UIViewController] = [:]
-
         init(_ parent: DistrictMapRepresentable) {
             self.parent = parent
         }
@@ -413,7 +417,11 @@ struct DistrictMapRepresentable: UIViewRepresentable {
             overlayRoles.removeAll()
             renderers.removeAll()
 
-            let tolerance = Self.overlaySimplifyTolerance
+            // Border smoothing (Douglas-Peucker simplification) disabled for now:
+            // each district's rings are simplified independently, so shared borders
+            // with neighbouring districts no longer line up and small districts look
+            // off. Restore `Self.overlaySimplifyTolerance` to re-enable it later.
+            let tolerance = 0.0 // Self.overlaySimplifyTolerance
 
             // 1. Cache Geometry if needed (only runs once)
             if districtPolygonCache.isEmpty {
@@ -446,11 +454,13 @@ struct DistrictMapRepresentable: UIViewRepresentable {
             for boundary in parent.stateBoundaries {
                 let polygons = Self.polygons(for: boundary, simplifyTolerance: tolerance)
                 guard !polygons.isEmpty else { continue }
-                
+
                 let overlay = MKMultiPolygon(polygons)
                 overlayRoles[ObjectIdentifier(overlay)] = .stateOutline
                 mapView.addOverlay(overlay, level: .aboveLabels)
             }
+
+            print("🗺️ [Map] rebuildOverlays — total overlays on map=\(mapView.overlays.count), roles=\(overlayRoles.count)")
         }
 
         private static let overlaySimplifyTolerance: Double = 0.01
@@ -563,14 +573,37 @@ struct DistrictMapRepresentable: UIViewRepresentable {
         }*/
 
         // MARK: Annotations
+        private func updateAnnotationVisibility(on mapView: MKMapView) {
+            let distance = mapView.camera.centerCoordinateDistance
+            let shouldShow = distance < 2_000_000
+
+            // Only run the animation block if the visibility state actually needs to change
+            guard shouldShow != arePinsVisible else { return }
+            print("🗺️ [Map] pin visibility → \(shouldShow ? "SHOW" : "HIDE") (centerDistance=\(Int(distance)) m, threshold=2000000)")
+            arePinsVisible = shouldShow
+
+            UIView.animate(withDuration: 0.25) {
+                for annotation in mapView.annotations {
+                    if annotation is MKUserLocation { continue }
+                    mapView.view(for: annotation)?.alpha = shouldShow ? 1.0 : 0.0
+                }
+            }
+
+            // Now that the pins are visible, kick off the portrait fetches that
+            // were deferred while zoomed out.
+            if shouldShow {
+                for annotation in mapView.annotations where !(annotation is MKUserLocation) {
+                    (mapView.view(for: annotation) as? RepresentativePortraitAnnotationView)?.loadImageIfNeeded()
+                }
+            }
+        }
 
         func rebuildAnnotations(on mapView: MKMapView) {
             let stale = mapView.annotations.filter { !($0 is MKUserLocation) }
             mapView.removeAnnotations(stale)
-            hostingControllers.removeAll()
 
             // The user's own House delegation, pinned at the district's middle.
-            for rep in parent.mappable {
+            for rep in parent.allRepresentatives {
                 guard let boundary = parent.districtBoundaries.first(where: {
                     DistrictMapView.districtKey(state: $0.state, district: $0.district)
                         == DistrictMapView.districtKey(state: rep.state, district: rep.district)
@@ -578,34 +611,26 @@ struct DistrictMapRepresentable: UIViewRepresentable {
                 mapView.addAnnotation(RepresentativeAnnotation(representative: rep, coordinate: boundary.centroid))
             }
             // Note: Governors loop removed.
+            print("🗺️ [Map] rebuildAnnotations — reps=\(parent.allRepresentatives.count), annotations on map=\(mapView.annotations.count)")
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
             if annotation is MKUserLocation { return nil }
-            if let rep = annotation as? RepresentativeAnnotation {
-                return portraitView(
-                    for: annotation, on: mapView, alpha: 1.0,
-                    content: AnyView(RepresentativePortrait(representative: rep.representative, size: 40, style: .outline))
-                )
-            }
-            return nil
-        }
+            guard let rep = annotation as? RepresentativeAnnotation else { return nil }
 
-        private func portraitView(for annotation: MKAnnotation, on mapView: MKMapView, alpha: CGFloat, content: AnyView) -> MKAnnotationView {
-            let identifier = "portrait"
-            let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier)
-                ?? MKAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+            let view = mapView.dequeueReusableAnnotationView(withIdentifier: RepresentativePortraitAnnotationView.reuseIdentifier)
+                as? RepresentativePortraitAnnotationView
+                ?? RepresentativePortraitAnnotationView(annotation: annotation, reuseIdentifier: RepresentativePortraitAnnotationView.reuseIdentifier)
             view.annotation = annotation
-            view.subviews.forEach { $0.removeFromSuperview() }
+            view.configure(with: rep.representative)
 
-            let host = UIHostingController(rootView: content)
-            host.view.backgroundColor = .clear
-            host.view.frame = CGRect(x: 0, y: 0, width: 40, height: 40)
-            view.frame = host.view.frame
-            view.centerOffset = .zero
-            view.addSubview(host.view)
-            view.alpha = alpha
-            hostingControllers[ObjectIdentifier(annotation)] = host
+            // Only fetch the portrait when the pin is actually visible. When
+            // zoomed out the pins are hidden, so loading them just floods the
+            // shared URL session with hundreds of requests for photos no one
+            // can see — which is what starved every other image load.
+            let isZoomedIn = mapView.camera.centerCoordinateDistance < 2_000_000
+            view.alpha = isZoomedIn ? 1.0 : 0.0
+            if isZoomedIn { view.loadImageIfNeeded() }
             return view
         }
 
@@ -613,6 +638,34 @@ struct DistrictMapRepresentable: UIViewRepresentable {
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             updateCenteredState(for: mapView.region)
+        }
+
+        func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            updateAnnotationVisibility(on: mapView)
+        }
+
+        // MARK: Tile-load diagnostics
+        // These fire as MapKit fetches the base map imagery. If the map is grey,
+        // watch for "did FAIL" (or "will start" with no matching "did finish") —
+        // that pinpoints a base-tile loading problem rather than an overlay/region one.
+        func mapViewWillStartLoadingMap(_ mapView: MKMapView) {
+            print("🗺️ [Map] tiles: will start loading")
+        }
+
+        func mapViewDidFinishLoadingMap(_ mapView: MKMapView) {
+            print("🗺️ [Map] tiles: did finish loading")
+        }
+
+        func mapViewDidFailLoadingMap(_ mapView: MKMapView, withError error: Error) {
+            print("🗺️ [Map] tiles: DID FAIL loading — \(error.localizedDescription)")
+        }
+
+        func mapViewWillStartRenderingMap(_ mapView: MKMapView) {
+            print("🗺️ [Map] tiles: will start rendering")
+        }
+
+        func mapViewDidFinishRenderingMap(_ mapView: MKMapView, fullyRendered: Bool) {
+            print("🗺️ [Map] tiles: did finish rendering (fullyRendered=\(fullyRendered))")
         }
 
         private func updateCenteredState(for region: MKCoordinateRegion) {
@@ -664,6 +717,149 @@ final class RepresentativeAnnotation: NSObject, MKAnnotation {
     init(representative: Representative, coordinate: CLLocationCoordinate2D) {
         self.representative = representative
         self.coordinate = coordinate
+    }
+}
+
+/// The annotation view for a representative pin: a circular portrait with a
+/// party-colored ring, falling back to colored initials until (or unless) the
+/// photo loads.
+///
+/// This deliberately renders the portrait with a plain `UIImageView` and loads
+/// it directly through `ImageCache`, rather than hosting a SwiftUI
+/// `RepresentativePortrait` in a `UIHostingController`. A per-pin hosting
+/// controller that's only added as a subview (never parented as a child view
+/// controller) has an unreliable SwiftUI lifecycle inside a recycled
+/// `MKAnnotationView` — its `.task` may never fire — so the on-demand photo
+/// fetch silently never started. Driving the load ourselves sidesteps that and
+/// is far lighter across hundreds of pins.
+@MainActor
+final class RepresentativePortraitAnnotationView: MKAnnotationView {
+    static let reuseIdentifier = "RepresentativePortrait"
+    private static let diameter: CGFloat = 40
+
+    private let placeholderView = UIView()
+    private let initialsLabel = UILabel()
+    private let imageView = UIImageView()
+
+    /// The portrait to fetch when this pin becomes visible; set by `configure`,
+    /// loaded lazily by `loadImageIfNeeded`.
+    private var portraitURL: URL?
+    /// The in-flight portrait load, cancelled when the view is reused for a
+    /// different subject so a slow, stale fetch can't land on the wrong pin.
+    private var loadTask: Task<Void, Never>?
+    /// The URL a load is currently in flight for, so we don't start a second.
+    private var loadingURL: URL?
+    /// The URL the current image was loaded for, so a reuse for the same subject
+    /// keeps the photo instead of flashing back to the placeholder.
+    private var loadedURL: URL?
+
+    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
+        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
+        let bounds = CGRect(x: 0, y: 0, width: Self.diameter, height: Self.diameter)
+        frame = bounds
+        backgroundColor = .clear
+        centerOffset = .zero
+
+        // Placeholder: a party-colored circle with white initials.
+        placeholderView.frame = bounds
+        placeholderView.layer.cornerRadius = Self.diameter / 2
+        placeholderView.clipsToBounds = true
+        placeholderView.layer.borderWidth = 3
+        addSubview(placeholderView)
+
+        initialsLabel.frame = bounds
+        initialsLabel.textAlignment = .center
+        initialsLabel.textColor = .white
+        initialsLabel.font = .systemFont(ofSize: Self.diameter * 0.34, weight: .semibold)
+        placeholderView.addSubview(initialsLabel)
+
+        // Portrait, clipped to a circle with the same party-colored ring.
+        imageView.frame = bounds
+        imageView.contentMode = .scaleAspectFill
+        imageView.clipsToBounds = true
+        imageView.layer.cornerRadius = Self.diameter / 2
+        imageView.layer.borderWidth = 3
+        imageView.isHidden = true
+        addSubview(imageView)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    /// Points the view at `representative`: applies its party color/initials and
+    /// records the portrait to load. The photo itself is fetched lazily by
+    /// `loadImageIfNeeded` once the pin is actually visible, so panning across a
+    /// zoomed-out map (where hundreds of pins exist but are hidden) doesn't fire
+    /// hundreds of simultaneous downloads and starve the shared URL session.
+    /// Safe to call on a recycled view.
+    func configure(with representative: Representative) {
+        let ringColor = UIColor(representative.party.color).withAlphaComponent(0.6).cgColor
+        placeholderView.backgroundColor = UIColor(representative.party.color)
+        placeholderView.layer.borderColor = ringColor
+        imageView.layer.borderColor = ringColor
+        initialsLabel.text = Self.initials(for: representative.name)
+
+        let url = representative.portraitURL
+        // Reused for the same subject — keep whatever's loaded or in flight.
+        if url == portraitURL { return }
+
+        // Different subject: reset and wait for the next `loadImageIfNeeded`.
+        loadTask?.cancel()
+        loadTask = nil
+        portraitURL = url
+        loadingURL = nil
+        loadedURL = nil
+        imageView.image = nil
+        showPlaceholder()
+    }
+
+    /// Starts the portrait fetch if the pin has a portrait it hasn't already
+    /// loaded or begun loading. Called when the pin becomes visible.
+    func loadImageIfNeeded() {
+        guard let url = portraitURL, loadedURL != url, loadingURL != url else { return }
+        loadingURL = url
+        loadTask = Task { [weak self] in
+            let image = await ImageCache.shared.image(for: url)
+            guard let self, !Task.isCancelled, self.portraitURL == url else { return }
+            if let image {
+                self.imageView.image = image
+                self.loadedURL = url
+                self.showImage()
+            }
+            if self.loadingURL == url { self.loadingURL = nil }
+        }
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        loadTask?.cancel()
+        loadTask = nil
+        portraitURL = nil
+        loadingURL = nil
+        loadedURL = nil
+        imageView.image = nil
+        showPlaceholder()
+    }
+
+    private func showImage() {
+        imageView.isHidden = false
+        placeholderView.isHidden = true
+    }
+
+    private func showPlaceholder() {
+        imageView.isHidden = true
+        placeholderView.isHidden = false
+    }
+
+    /// The first letter of up to the first two words of `name`, e.g. "JD".
+    private static func initials(for name: String) -> String {
+        name.split(separator: " ")
+            .prefix(2)
+            .compactMap { $0.first }
+            .map(String.init)
+            .joined()
     }
 }
 /*
@@ -739,6 +935,7 @@ private struct DistrictDetailSheet: View {
     let color: Color
     let representative: Representative?
     let populationDirectory: DistrictPopulationDirectory
+    let demographicsDirectory: DistrictDemographicsDirectory
     let industryDirectory: DistrictIndustryDirectory
     let cityDirectory: DistrictCityDirectory
     let universityDirectory: DistrictUniversityDirectory
@@ -747,7 +944,11 @@ private struct DistrictDetailSheet: View {
         populationDirectory.cachedPopulation(state: boundary.state, district: boundary.district ?? 0)
     }
 
-    private var topIndustries: [String]? {
+    private var demographics: DistrictDemographics? {
+        demographicsDirectory.cachedDemographics(state: boundary.state, district: boundary.district ?? 0)
+    }
+
+    private var topIndustries: [IndustryShare]? {
         industryDirectory.cachedTopIndustries(state: boundary.state, district: boundary.district ?? 0)
     }
 
@@ -765,17 +966,105 @@ private struct DistrictDetailSheet: View {
         return formatter
     }()
 
+    /// A labeled list of the district's headline Census demographics, with any
+    /// figures the API couldn't compute omitted.
+    @ViewBuilder
+    private func demographicsSection(_ demographics: DistrictDemographics) -> some View {
+        let rows: [(label: String, value: String)] = [
+            demographics.medianHouseholdIncome.map {
+                ("Median household income", $0.formatted(.currency(code: "USD").precision(.fractionLength(0))))
+            },
+            demographics.medianAge.map {
+                ("Median age", "\($0.formatted(.number.precision(.fractionLength(1)))) years")
+            },
+            demographics.bachelorsOrHigherShare.map {
+                ("Bachelor's degree or higher", $0.formatted(.percent.precision(.fractionLength(0))))
+            },
+            demographics.povertyShare.map {
+                ("Poverty rate", $0.formatted(.percent.precision(.fractionLength(0))))
+            },
+            demographics.unemploymentShare.map {
+                ("Unemployment rate", $0.formatted(.percent.precision(.fractionLength(0))))
+            },
+        ].compactMap { $0 }
+
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Demographics")
+                    .font(.subheadline.bold())
+                ForEach(rows, id: \.label) { row in
+                    HStack {
+                        Text(row.label)
+                        Spacer()
+                        Text(row.value)
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 20) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
                 HStack(alignment: .top, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(boundary.displayName)
                             .font(.title2.bold())
+                        
+                        Divider()
+                            .padding(8)
+                        
                         if let population {
                             Text("Population: \(Self.populationFormatter.string(from: NSNumber(value: population)) ?? "\(population)")")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
+                        }
+                        
+                        if let demographics {
+                            demographicsSection(demographics)
+                        }
+                        
+                        if let topCities, !topCities.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Top Cities")
+                                    .font(.subheadline.bold())
+                                ForEach(topCities, id: \.self) { city in
+                                    Text(city)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+
+                        if let topIndustries, !topIndustries.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Top Industries")
+                                    .font(.subheadline.bold())
+                                ForEach(topIndustries, id: \.name) { industry in
+                                    HStack {
+                                        Text(industry.name)
+                                        Spacer()
+                                        Text(industry.share, format: .percent.precision(.fractionLength(0)))
+                                    }
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+
+                        if let topUniversities, !topUniversities.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Top Universities")
+                                    .font(.subheadline.bold())
+                                ForEach(topUniversities, id: \.self) { university in
+                                    Text(university)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -783,49 +1072,14 @@ private struct DistrictDetailSheet: View {
                     DistrictOutlineShape(rings: boundary.rings)
                         .fill(color.opacity(0.3))
                         .overlay(DistrictOutlineShape(rings: boundary.rings).stroke(color, lineWidth: 1.5))
-                        .frame(width: 80, height: 80)
+                        .frame(width: 100, height: 100)
                 }
                 .task {
                     await populationDirectory.loadIfNeeded(state: boundary.state, district: boundary.district ?? 0)
+                    await demographicsDirectory.loadIfNeeded(state: boundary.state, district: boundary.district ?? 0)
                     await industryDirectory.loadIfNeeded(state: boundary.state, district: boundary.district ?? 0)
                     await cityDirectory.loadIfNeeded(boundary: boundary)
                     await universityDirectory.loadIfNeeded(boundary: boundary)
-                }
-
-                if let topIndustries, !topIndustries.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Top Industries")
-                            .font(.subheadline.bold())
-                        ForEach(topIndustries, id: \.self) { industry in
-                            Text(industry)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-
-                if let topCities, !topCities.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Top Cities")
-                            .font(.subheadline.bold())
-                        ForEach(topCities, id: \.self) { city in
-                            Text(city)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-
-                if let topUniversities, !topUniversities.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Top Universities")
-                            .font(.subheadline.bold())
-                        ForEach(topUniversities, id: \.self) { university in
-                            Text(university)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
                 }
 
                 Divider()
@@ -840,11 +1094,11 @@ private struct DistrictDetailSheet: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
-
-                Spacer()
+                }
+                .padding(16)
+                .padding(.top, 16)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding()
-            .padding(.top, 16)
             .navigationDestination(for: Representative.self) { rep in
                 RepresentativeDetailView(representative: rep)
             }

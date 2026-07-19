@@ -12,12 +12,15 @@
   - [x] Pull governors headshots from the national governors association
 
 - [ ] Build the interactive map view (evaluate performance and utility)
-  - [ ] Currently the map wobbles wildly, especailly when a user zooms in/out. We should try and keep the current CAlayering approach so that there are no tiling effects, but the map needs to be glued to the actual map. Trying to make it a child of some CALaying thing might have been what messed it up. Also, there are black border outlines between the states. The state flag images are over that, but correctly still under the governor icons. the black outlines should be on the same level or over the state flag outlines and the state flag outlines should transform perfectly with the map just like everything else on the map does. anaylyze how we render everything else other than the state flag outlines. those should still be one image but they do not transform correctly.
-  - [ ] Add more information per district. Each district should display some basic information about the district, like the population count, top sectors/industry, top cities by population, top universties, and anything else relevant to the district. it should still show the representative. Feel free to split this into smaller tasks and add to-do list items under it. Right now the district detail section just shows the representative, but it should show more information. Is the informaiton below loaded in the backend? Wire it to the district detail sheet and display it if we have it in the backend
+  - [x] Disable the border smoothing technique in the map for now. just comment it out so that we can maybe use it later, but the 0.005 smoothing is making some smaller districts look weird when next to other districts
+  - [x] Photos no longer seem to be loading for the representatives. Is this just because we are attempting to load 435 representatives in the map? How can we prioritize loading our representatives first, and then our fellow state representatives on the map, then neighboring states, and then all of them? Instead of 435 in one go
+  - [ ] Add more information per district. Each district should display some basic information about the district, like the population count, top sectors/industry, top cities by population, top universties, and anything else relevant to the district. it should still show the representative. Feel free to split this into smaller tasks and add to-do list items under it. Right now the district detail section just shows the representative, but it should show more information. Is the informaiton below loaded in the backend? Wire it to the district detail sheet and display it if we have it in the backend.
+    - [ ] In the district sheet, text should extend to the bottom of the district outline. the district outline should occupy a corner of the text instead of an column. this prevents text from extending into the area beneath it. the text should start where it does exactly, the the title and text start shouldnt move, but it should just take advantage of the space being claimed under the district outline
     - [x] Show each district's total population (Census ACS estimate) in the district detail sheet
     - [x] Show each district's top sectors/industries in the district detail sheet
     - [x] Show each district's top cities by population in the district detail sheet
     - [x] Show each district's top universities in the district detail sheet
+      - [ ] Starting from the top university, discard the next university if it is less than 2/5 of the last universities size by pop
   - [x] Once a certain zoom level is reached, out to the state level, display the governors icons in the middle of the state. The state outline should be filled with the state flag instead of a single party color.
     - [x] Add a `StateFlagDirectory` (postal code -> Wikimedia Commons flag image URL, resolved via `Special:FilePath` so no per-state upload hash is needed) and a `StateFlagImage` view that loads/caches it, mirroring `GovernorPortrait`
     - [x] Detect the map's zoom level and, once zoomed out to state level, swap each state polygon's fill from its district party-color tint to its `StateFlagImage` and show the state's governor (via `GovernorPortrait`) annotated at the state's centroid instead of per-district representative pins
@@ -30,7 +33,7 @@
       - [x] Add total population, top sectors/industries, top cities, and top universities sections to the state-level detail sheet (new state-keyed data directories, mirroring the district ones)
   - [x] We currently dont need to see the rest of the world in our map. Is there a way to just load a map of america? Would that be better for performance? We should just spend computational energy rendering America
   - [ ] Create a "toolbar" at the top of the map under the District maps title. this should have a "show icons" toggle as well as the recentering button on the right. the show icons toggle should toggle both district representative icons as well as governor icons
-  - [ ] Some districts dont have representatives on file. theres one in california that I see, one in texas, one in florida. Do those districts truly not have a representative, or is that a glitch?
+  - [ ] Organize the map code into different files with clear purposes and outline a feature for adding state flags after being zoomed out, but dont implement it. Just add filler files for that task and keep hte current approach while cleaning up the files/organizing them. Keeping the project organized, modular, and maintainable is a priority.
 
 - [ ] For the representatives view, start loading their information immediately if none is found on disk upon app load. The user shouldnt have to open the representatives tab for the loading to start or to kickstart the image loading.
 - [ ] Same with the map view. the map should be fully rendered upon app load, not when the map tab is opened for the first time. Upon app load load all recent bills & their details, then your representatives, then map data all at app launch before caching it for future runs.
@@ -49,7 +52,8 @@
 
 ## Version 1.0
 ONLY DO THIS WHEN EVERYTHING ABOVE IS IMPLEMENTED
-- [ ] Gate te sample data behind the #ifDebug statement so that it doesnt bload the final release
+Get multiple API keys so the entire app isnt on my personal one
+- [ ] Gate the sample data behind the #ifDebug statement so that it doesnt bload the final release
 - [ ] Comment out the stock trades metric for now
 - [ ] Load "No representatives found" if there is some error retrieving the representatives and "Error collecting recent bill information" if there is an error loading bills. If there is an error finding representatives, offer the user to type in a zip code to load representatives with the text "On vacation? Type in your home zip code to find your representatives:"
 - [ ] Organize the project's functions and file structure for maximum maintainability and understanding
@@ -63,6 +67,7 @@ ONLY DO THIS WHEN EVERYTHING ABOVE IS IMPLEMENTED
 DO NOT DO UNLESS EVERYTHING BEFORE 1.0 IS DONE
 
 - [ ] Re-add stock trades metric
+- [ ] If a district is a U around a dot, the representative could be misplaced within the dot instead of actually in their district
 - [ ] "Beats the market" quantitative metric — parse each PTR PDF into transactions (ticker, buy/sell, amount range, date) + pull historical prices to compute returns vs. a benchmark *(backend job: PDF parsing + a historical price data source; moved here from 0.3)*
 - [ ] Add information about if a senator beats the market. Pre calculate this and add this as a hard value in an update if there is no online source readily available
 - [ ] Add information on state legislatures somewhere behind a Poltica+ IAP
