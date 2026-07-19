@@ -102,28 +102,49 @@ struct TopBillWidgetEntryView: View {
     var body: some View {
         if let bill = entry.bill {
             VStack(alignment: .leading, spacing: 6) {
-                Text(bill.status.displayLabel(chamber: bill.chamber).uppercased())
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.8))
-                    .lineLimit(1)
-                Text(bill.displayName)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(family == .systemSmall ? 3 : 4)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(bill.summary)
-                    .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.85))
-                    .lineLimit(family == .systemSmall ? 4 : 7)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
-                if let code = bill.displayCode {
-                    Text(code)
-                        .font(.caption2)
-                        .foregroundStyle(.white.opacity(0.7))
+                
+                HStack{ // The widget header
+                    Text(bill.status.displayLabel(chamber: bill.chamber).uppercased())
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.8))
+                        .lineLimit(1)
+                    
+                    Spacer()
+                    
+                    if let code = bill.displayCode {
+                        Text(code)
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                }
+                
+                VStack(alignment: .leading, spacing: 6) {
+                    // The widget title
+                    Text(bill.displayName)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        //.lineLimit(family == .systemSmall ? 3 : 4)
+                    
+                    // The widget body text
+                    Text(bill.summary)
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.85))
+                        .lineLimit(family == .systemSmall ? 4 : 7)
+                }
+                .frame(maxHeight: .infinity, alignment: .topLeading)
+                .mask {  // The fade-out mask to just this text group
+                    LinearGradient(
+                        stops: [
+                            .init(color: .black, location: 0.0),
+                            .init(color: .black, location: 0.67), // Solid for the first 67% of the space
+                            .init(color: .clear, location: 1.0)   // Fades to transparent at the very bottom edge
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
                 }
             }
-            .padding(12)
+            .padding(.horizontal, 12)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .containerBackground(bill.status.widgetBackground, for: .widget)
             .widgetURL(bill.widgetDeepLinkURL)

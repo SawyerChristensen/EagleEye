@@ -40,8 +40,7 @@
 - [x] In the voting history for an enacted law, I only see how my house of representatives representative voted. I want to see how my senators voted as well, but their votes dont show up (at least in the same section as my representatives vote shows up). I want to see my senators vote in the same spot
 
 - [x] Add home screen widgets that show what would be shown as the top bill in the recent bills feed
-  - [ ] This is broken ^ currently the text is larger than the actual widget. is it possible to detect the widget's bounds?
-  - [ ] Center the progress text at the top of the widget
+  - [x] This is broken ^ currently the text is larger than the actual widget. is it possible to detect the widget's bounds?
   - [x] When tapping on the widget, the user should automatically be sent to the bill that was displayed detail view, with a back button sending them to recent bills.
 - [x] Add system notifications for new bills being passed
   - [x] Recently enacted laws should be a push notification
