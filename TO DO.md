@@ -48,7 +48,7 @@
   - [ ] Verify these actually work. Does politica every reload bills in the background? How will the app know when a bill has been updated? How frequently should we check? is there a certain time of day the library of congress updates their information
 - [ ] Add the SF symbol to the widget view.
 - [ ] Just make the progress sf symbol/text have the color like progress pill normally does, just without the pill outline in the widget, the widget background should be the sytem background (ie, no background if it defaults to system background)
-- [ ] Better onboarding screen
+- [x] Better onboarding screen
 - [ ] Get multiple API keys so the entire app isnt on my personal one
 - [ ] Gate the sample data behind the #ifDebug statement so that it doesnt bload the final release
 - [ ] Comment out the stock trades metric for now

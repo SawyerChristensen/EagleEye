@@ -24,10 +24,20 @@ struct ContentView: View {
     /// A bill referenced by the home screen widget's tap URL, forwarded to the
     /// home feed's navigation stack once the main tabs are showing.
     @State private var widgetDeepLinkedBill: LegislationRef?
+    
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @State private var hideOnboardingText = false
+    @State private var dragOnboardingUp = false
 
     var body: some View {
-        content
-            .onOpenURL(perform: handleWidgetURL)
+        ZStack {
+            content
+                .onOpenURL(perform: handleWidgetURL)
+            
+            if !hasCompletedOnboarding {
+                onboardingView
+            }
+        }
     }
 
     @ViewBuilder
@@ -108,6 +118,135 @@ struct ContentView: View {
             )
         }))
         .environment(bookmarksStore)
+    }
+    
+    private var onboardingView: some View {
+        GeometryReader { geo in
+            VStack(spacing: -2) {
+                
+                // TOP SECTION (80% of screen)
+                ZStack(alignment: .bottom) {
+                    // Moved the gradient here so it doesn't bleed behind the white section
+                    LinearGradient(
+                        colors: [
+                            Color(hue: 207 / 360.0, saturation: 1.0, brightness: 0.9),
+                            Color(hue: 213 / 360.0, saturation: 1.0, brightness: 0.25)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    
+                    VStack(spacing: 24) {
+                        Spacer()
+                        
+                        Text("Welcome to Politica")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .fontDesign(.serif)
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                            .shadow(color: .black.opacity(0.4), radius: 4, x: 4, y: 4)
+                        
+                        // Feature List
+                        VStack(alignment: .leading, spacing: 24) {
+                            HStack(spacing: 16) {
+                                Image(systemName: "person.2.fill")
+                                    .font(.title2)
+                                    .frame(width: 32)
+                                Text("Meet your representatives")
+                                    .font(.title3)
+                                    .fontWeight(.medium)
+                            }
+                            
+                            HStack(spacing: 16) {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .font(.title2)
+                                    .frame(width: 32)
+                                Text("See how they vote")
+                                    .font(.title3)
+                                    .fontWeight(.medium)
+                            }
+                            
+                            HStack(spacing: 16) {
+                                Image(systemName: "bookmark.fill") //alternative: "scroll.fill"
+                                    .font(.title2)
+                                    .frame(width: 32)
+                                Text("Track individual bills")
+                                    .font(.title3)
+                                    .fontWeight(.medium)
+                            }
+                        }
+                        .foregroundColor(.white)
+                        .shadow(color: .black.opacity(0.4), radius: 4, x: 4, y: 4)
+                        // This padding brings the list inward slightly so it's centered nicely under the title
+                        .padding(.horizontal, 40)
+                        
+                        Spacer()
+                        Spacer()
+                        Spacer()
+                        Spacer() //refactor this, 4 spacers seems unnecessary
+                    }
+                    .opacity(hideOnboardingText ? 0 : 1)
+                    .offset(y: dragOnboardingUp ? (geo.size.height * 1.5) : 0)
+                    
+                    Image("CongressIconExtended")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: geo.size.width)
+                        .shadow(color: .black.opacity(0.4), radius: 4, x: 4, y: 4)
+                        .scaleEffect(dragOnboardingUp ? 2.75 : 1.0, anchor: .bottom)
+                }
+                .frame(height: geo.size.height * 0.85)
+                
+                // BOTTOM SECTION (Auto-fills the remaining 20%)
+                ZStack(alignment: .top) {
+                    VStack(spacing: -2) {
+                        Color.white
+                            .frame(height: geo.size.height * 0.15)
+                        
+                        LinearGradient(
+                            colors: [.white, .white.opacity(0)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: geo.size.height * 0.5)
+                    }
+                    
+                    Button(action: executeOnboardingTransition) {
+                        HStack(spacing: 8) {
+                            Text("Get Started")
+                            Image(systemName: "arrow.forward")
+                        }
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(Color(red: 17 / 255.0, green: 101 / 255.0, blue: 172 / 255.0))
+                    }
+                    //.padding(.top, 5)
+                    .opacity(hideOnboardingText ? 0 : 1)
+                    .offset(y: dragOnboardingUp ? (geo.size.height * 1.5) : 0)
+                }
+                .clipped()
+            }
+            // Because the GeometryReader ignores safe areas, geo.size.height is the exact
+            // total height of the phone display. Sliding up by this exact amount
+            // perfectly clears the screen, revealing the app directly beneath it.
+            .offset(y: dragOnboardingUp ? -(geo.size.height * 1.5) : 0)
+        }
+        .ignoresSafeArea()
+    }
+    
+    private func executeOnboardingTransition() {
+        withAnimation(.easeOut(duration: 0.6)) {
+            hideOnboardingText = true
+        }
+        
+        withAnimation(.easeInOut(duration: 0.9).delay(0.2)) {
+            dragOnboardingUp = true
+        }
+        // Remove the layer once it is fully cleared.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            hasCompletedOnboarding = true
+        }
     }
 
     /// Refreshes the home feed, then checks whether any bookmarked bill's

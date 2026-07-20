@@ -11,11 +11,9 @@ import SwiftUI
 struct EagleEyeApp: App {
     init() {
         #if DEBUG
-        // Pass "-ResetAppState" as a launch argument (Scheme → Run → Arguments)
-        // to wipe the cached delegation and bills on launch, so the app starts
-        // fresh at the location prompt. Location *permission* is an OS setting
-        // that can't be reset here — use Simulator "Reset Location & Privacy"
-        // (or delete the app) alongside this for a fully clean launch.
+        // Force the onboarding to show up every time we build the app
+        UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
+        
         if ProcessInfo.processInfo.arguments.contains("-ResetAppState"),
            let bundleID = Bundle.main.bundleIdentifier {
             UserDefaults.standard.removePersistentDomain(forName: bundleID)
