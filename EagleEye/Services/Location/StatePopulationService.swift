@@ -32,11 +32,15 @@ struct StatePopulationService {
     /// no matching row.
     func population(state: String) async throws -> Int? {
         guard let fips = CensusStateFIPS.byPostalCode[state] else { return nil }
+        // The Census Data API rejects keyless requests, so without a key there
+        // is nothing to fetch — leave the section empty rather than fail.
+        guard CensusAPIKey.isConfigured else { return nil }
 
         var components = URLComponents(string: "https://api.census.gov/data/\(vintage)/acs/acs5")!
         components.queryItems = [
             URLQueryItem(name: "get", value: "NAME,B01003_001E"),
             URLQueryItem(name: "for", value: "state:\(fips)"),
+            URLQueryItem(name: "key", value: CensusAPIKey.configured),
         ]
 
         let (data, response) = try await session.data(from: components.url!)

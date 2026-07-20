@@ -44,7 +44,6 @@ struct CommitteeService {
         async let membership = fetch([String: [MembershipEntry]].self, from: Self.membershipURL)
 
         guard let committees = await committees, let membership = await membership else {
-            print("🚨 CommitteeService: Failed to load committee dataset; profiles will show no committees.")
             return [:]
         }
 
@@ -69,7 +68,6 @@ struct CommitteeService {
             result[id] = names.sorted()
         }
 
-        print("✅ CommitteeService: Loaded committee assignments for \(result.count) members.")
         return result
     }
 

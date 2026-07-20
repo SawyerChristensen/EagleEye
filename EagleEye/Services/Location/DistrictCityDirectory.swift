@@ -70,7 +70,10 @@ final class DistrictCityDirectory {
 
     // MARK: - Cache
 
-    private static let cacheKey = "cachedDistrictCities"
+    // Bumped to `…V2` to discard caches poisoned by an earlier bug where the
+    // population CSV failed to decode, so every district cached an empty
+    // city list that would otherwise persist and stay blank.
+    private static let cacheKey = "cachedDistrictCitiesV2"
 
     private static func saveCache(_ cache: [String: [String]]) {
         if let data = try? JSONEncoder().encode(cache) {

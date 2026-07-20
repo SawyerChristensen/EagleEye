@@ -165,20 +165,17 @@ actor ImageCache {
             do {
                 (data, response) = try await URLSession.shared.data(from: url)
             } catch {
-                print("🖼️ [Cache] network ERROR for \(url.lastPathComponent): \(error.localizedDescription)")
                 return nil
             }
 
             if let http = response as? HTTPURLResponse {
                 guard 200..<300 ~= http.statusCode else {
-                    print("🖼️ [Cache] HTTP \(http.statusCode) for \(url.lastPathComponent)")
                     return nil
                 }
             }
 
             return await Self.offPool({
                 guard let image = Self.downsampledImage(from: data, maxDimension: Self.maxPixelDimension) else {
-                    print("🖼️ [Cache] DECODE FAILED (\(data.count) bytes) for \(url.lastPathComponent)")
                     return nil
                 }
                 try? data.write(to: fileURL)
@@ -240,8 +237,6 @@ actor ImageCache {
     /// priority by default so it yields to portraits the user is looking at.
     func prefetch(_ urls: [URL], concurrency: Int = 6, priority: TaskPriority = .utility) async {
         var next = 0
-        var loaded = 0
-        var failed = 0
         await withTaskGroup(of: Bool.self) { group in
             // Keep at most `concurrency` loads running: seed that many workers,
             // then start one more each time an earlier one finishes.
@@ -255,12 +250,10 @@ actor ImageCache {
                 return true
             }
             for _ in 0..<max(1, concurrency) where addNext() {}
-            for await ok in group {
-                if ok { loaded += 1 } else { failed += 1 }
+            for await _ in group {
                 _ = addNext()
             }
         }
-        print("🖼️ [Cache] prefetch tally — loaded=\(loaded) failed=\(failed) of \(urls.count)")
     }
 
     /// A filesystem-safe, deterministic filename for a URL, stable across launches.
@@ -349,18 +342,14 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
                 // while we were loading, this task was cancelled — bail so a
                 // stale, slow load can't overwrite the correct image.
                 guard !Task.isCancelled else {
-                    print("🖼️ [Img] cancelled after load: \(url.lastPathComponent)")
                     return
                 }
-                print("🖼️ [Img] loaded: \(url.lastPathComponent)")
                 #if canImport(UIKit)
                 image = Image(uiImage: platformImage)
                 #elseif canImport(AppKit)
                 image = Image(nsImage: platformImage)
                 #endif
                 loadedURL = url
-            } else {
-                print("🖼️ [Img] FAILED (nil): \(url.absoluteString)")
             }
         }
     }

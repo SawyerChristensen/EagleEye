@@ -62,10 +62,7 @@ struct CongressService {
     /// two-letter postal code (e.g. "CA"). Returns the state's senators and
     /// all of its House members.
     func currentMembers(forState stateCode: String) async throws -> [Representative] {
-        print("🔍 CongressService: Starting fetch for state \(stateCode)...")
-        
         guard !apiKey.isEmpty, apiKey != Self.apiKeyPlaceholder else {
-            print("🚨 CongressService Error: API key is missing or still set to placeholder!")
             throw ServiceError.missingAPIKey
         }
 
@@ -80,72 +77,21 @@ struct CongressService {
         ]
 
         guard let url = components.url else {
-            print("🚨 CongressService Error: Failed to construct URL from components.")
             throw URLError(.badURL)
         }
-        
-        print("🌐 CongressService: Requesting URL: \(url.absoluteString.replacingOccurrences(of: apiKey, with: "REDACTED_KEY"))")
 
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(from: url)
-            print("📥 CongressService: Received raw payload (\(data.count) bytes).")
-        } catch {
-            print("🚨 CongressService Network Error: \(error.localizedDescription)")
-            throw error
-        }
-        
+        let (data, response) = try await session.data(from: url)
+
         guard let http = response as? HTTPURLResponse else {
-            print("🚨 CongressService Error: Response was not a valid HTTPURLResponse.")
             throw ServiceError.badResponse(-1)
         }
-        
-        print("📊 CongressService: HTTP Status Code: \(http.statusCode)")
-        
+
         guard 200..<300 ~= http.statusCode else {
-            print("🚨 CongressService Error: Bad HTTP Status Code \(http.statusCode).")
-            if let rawString = String(data: data, encoding: .utf8) {
-                print("📄 Server error body response: \(rawString)")
-            }
             throw ServiceError.badResponse(http.statusCode)
         }
 
-        // Catching specific decoding errors pinpointed to exact lines/keys
-        do {
-            let payload = try JSONDecoder().decode(MemberListResponse.self, from: data)
-            let mappedRepresentatives = payload.members.compactMap(Representative.init(member:))
-            print("✅ CongressService Success: Successfully decoded and mapped \(mappedRepresentatives.count) representatives.")
-            return mappedRepresentatives
-        } catch let decodingError as DecodingError {
-            print("🚨 CongressService JSON Decoding Failure!")
-            switch decodingError {
-            case .typeMismatch(let type, let context):
-                print("❌ Type Mismatch: Expected \(type) at coding path: \(context.codingPath.map(\.stringValue).joined(separator: "."))")
-                print("💡 Context: \(context.debugDescription)")
-            case .valueNotFound(let type, let context):
-                print("❌ Value Not Found: Expected \(type) at coding path: \(context.codingPath.map(\.stringValue).joined(separator: "."))")
-                print("💡 Context: \(context.debugDescription)")
-            case .keyNotFound(let key, let context):
-                print("❌ Key Not Found: Missing key '\(key.stringValue)' at coding path: \(context.codingPath.map(\.stringValue).joined(separator: "."))")
-                print("💡 Context: \(context.debugDescription)")
-            case .dataCorrupted(let context):
-                print("❌ Data Corrupted at coding path: \(context.codingPath.map(\.stringValue).joined(separator: "."))")
-                print("💡 Context: \(context.debugDescription)")
-            @unknown default:
-                print("❌ Unknown decoding error: \(decodingError)")
-            }
-            
-            // Helpful step to see the exact structural anomaly causing the crash
-            if let rawJSONString = String(data: data, encoding: .utf8) {
-                print("📝 Raw JSON Payload context begins below:")
-                print(String(rawJSONString.prefix(2000))) // Print up to first 2000 characters so console isn't flooded
-            }
-            throw decodingError
-        } catch {
-            print("🚨 CongressService Unexpected error during decoding phase: \(error)")
-            throw error
-        }
+        let payload = try JSONDecoder().decode(MemberListResponse.self, from: data)
+        return payload.members.compactMap(Representative.init(member:))
     }
 
     /// Fetches every current member of the House of Representatives nationwide
@@ -678,10 +624,7 @@ struct CongressService {
     /// `offset` skips past bills already ranked ahead of this slice, so callers
     /// can page through the importance-ranked pool for "load more" behavior.
     func recentBills(limit: Int = 20, offset: Int = 0) async throws -> [Bill] {
-        print("🔍 CongressService: Starting fetch for recent bills...")
-
         guard !apiKey.isEmpty, apiKey != Self.apiKeyPlaceholder else {
-            print("🚨 CongressService Error: API key is missing or still set to placeholder!")
             throw ServiceError.missingAPIKey
         }
 
@@ -706,27 +649,16 @@ struct CongressService {
         ]
 
         guard let url = components.url else {
-            print("🚨 CongressService Error: Failed to construct URL from components.")
             throw URLError(.badURL)
         }
 
-        print("🌐 CongressService: Requesting URL: \(url.absoluteString.replacingOccurrences(of: apiKey, with: "REDACTED_KEY"))")
-
         let (data, response) = try await session.data(from: url)
-        print("📥 CongressService: Received raw payload (\(data.count) bytes).")
 
         guard let http = response as? HTTPURLResponse else {
-            print("🚨 CongressService Error: Response was not a valid HTTPURLResponse.")
             throw ServiceError.badResponse(-1)
         }
 
-        print("📊 CongressService: HTTP Status Code: \(http.statusCode)")
-
         guard 200..<300 ~= http.statusCode else {
-            print("🚨 CongressService Error: Bad HTTP Status Code \(http.statusCode).")
-            if let rawString = String(data: data, encoding: .utf8) {
-                print("📄 Server error body response: \(rawString)")
-            }
             throw ServiceError.badResponse(http.statusCode)
         }
 
@@ -760,7 +692,6 @@ struct CongressService {
             return collected.sorted { $0.0 < $1.0 }.map(\.1)
         }
 
-        print("✅ CongressService Success: Selected and enriched \(bills.count) of \(payload.bills.count) bills by importance.")
         return bills
     }
 
@@ -1019,19 +950,15 @@ struct CongressService {
     static var configuredAPIKey: String {
         if let env = ProcessInfo.processInfo.environment["CONGRESS_GOV_API_KEY"],
            !env.isEmpty {
-            print("🔑 CongressService Key Resolution: Using key from Environment Variable.")
             return env
         }
         if let secret = secretsValue(forKey: "CongressGovAPIKey") {
-            print("🔑 CongressService Key Resolution: Using key from Secrets.plist.")
             return secret
         }
         if let plist = Bundle.main.object(forInfoDictionaryKey: "CongressGovAPIKey") as? String,
            !plist.isEmpty {
-            print("🔑 CongressService Key Resolution: Using key from Info.plist.")
             return plist
         }
-        print("⚠️ CongressService Key Resolution WARNING: No key detected. Defaulting to placeholder.")
         return apiKeyPlaceholder
     }
 

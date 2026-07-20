@@ -386,7 +386,6 @@ final class RepresentativesStore {
         guard let stateCode = placemarks.first?.administrativeArea, !stateCode.isEmpty else {
             throw CLError(.geocodeFoundNoResult)
         }
-        print("Detected state:", stateCode)
         return stateCode
     }
 

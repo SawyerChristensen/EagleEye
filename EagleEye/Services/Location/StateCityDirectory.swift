@@ -53,7 +53,9 @@ final class StateCityDirectory {
 
     // MARK: - Cache
 
-    private static let cacheKey = "cachedStateCities"
+    // Bumped to `…V2` to discard caches poisoned by an earlier bug where the
+    // population CSV failed to decode, leaving empty city lists cached.
+    private static let cacheKey = "cachedStateCitiesV2"
 
     private static func saveCache(_ cache: [String: [String]]) {
         if let data = try? JSONEncoder().encode(cache) {

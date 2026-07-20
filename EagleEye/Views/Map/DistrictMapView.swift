@@ -112,26 +112,21 @@ struct DistrictMapView: View {
             .navigationTitle("District Map")
             .navigationBarTitleDisplayMode(.inline)
             .task {
-                print("🗺️ [Map] .task start — userCoordinate=\(String(describing: userCoordinate))")
                 if !hasSetInitialRegion, let userCoordinate {
                     hasSetInitialRegion = true
                     initialRegion = wideRegion(centeredOn: userCoordinate)
-                    print("🗺️ [Map] set initialRegion around \(userCoordinate)")
                 }
                 async let nationalHouseLoad: Void = nationalHouseDirectory.loadIfNeeded()
                 async let nationalSenateLoad: Void = nationalSenateDirectory.loadIfNeeded()
                 if districtBoundaries.isEmpty, stateBoundaries.isEmpty {
-                    print("🗺️ [Map] loading boundaries…")
                     async let districts = Task.detached(priority: .userInitiated) { BoundaryLoader.loadDistricts() }.value
                     async let states = Task.detached(priority: .userInitiated) { BoundaryLoader.loadStates() }.value
                     districtBoundaries = await districts
                     stateBoundaries = await states
-                    print("🗺️ [Map] boundaries loaded — districts=\(districtBoundaries.count) states=\(stateBoundaries.count)")
                     centerOnUserDistrictIfNeeded()
                 }
                 await nationalHouseLoad
                 await nationalSenateLoad
-                print("🗺️ [Map] directories loaded — house=\(nationalHouseDirectory.members.count)")
                 rebuildPartyByDistrictCache()
                 // Portraits load on demand: MapKit builds a pin's view only when
                 // it scrolls on screen, and CachedAsyncImage fetches then. No bulk
@@ -155,6 +150,7 @@ struct DistrictMapView: View {
                 )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+                .presentationBackground(.background)
             }
             .sheet(item: $selectedState) { boundary in
                 StateDetailSheet(
@@ -353,7 +349,6 @@ struct DistrictMapRepresentable: UIViewRepresentable {
         tap.delegate = context.coordinator
         mapView.addGestureRecognizer(tap)
 
-        print("🗺️ [Map] makeUIView done — delegate set, camera bounds applied")
         return mapView
     }
 
@@ -379,7 +374,6 @@ struct DistrictMapRepresentable: UIViewRepresentable {
 
         if let initialRegion, !coordinator.didApplyInitialRegion {
             coordinator.didApplyInitialRegion = true
-            print("🗺️ [Map] applying initialRegion center=\(initialRegion.center) span=\(initialRegion.span)")
             mapView.setRegion(initialRegion, animated: false)
         }
 
@@ -486,8 +480,6 @@ struct DistrictMapRepresentable: UIViewRepresentable {
                 overlayRoles[ObjectIdentifier(overlay)] = .stateOutline
                 mapView.addOverlay(overlay, level: .aboveLabels)
             }
-
-            print("🗺️ [Map] rebuildOverlays — total overlays on map=\(mapView.overlays.count), roles=\(overlayRoles.count)")
         }
 
         private static let overlaySimplifyTolerance: Double = 0.01
@@ -601,12 +593,10 @@ struct DistrictMapRepresentable: UIViewRepresentable {
 
         // MARK: Annotations
         func updateAnnotationVisibility(on mapView: MKMapView) {
-            let distance = mapView.camera.centerCoordinateDistance
             let shouldShow = parent.showIcons //&& distance < 2_000_000
 
             // Only run the animation block if the visibility state actually needs to change
             guard shouldShow != arePinsVisible else { return }
-            print("🗺️ [Map] pin visibility → \(shouldShow ? "SHOW" : "HIDE") (centerDistance=\(Int(distance)) m, threshold=2000000)")
             arePinsVisible = shouldShow
 
             UIView.animate(withDuration: 0.25) {
@@ -638,7 +628,6 @@ struct DistrictMapRepresentable: UIViewRepresentable {
                 mapView.addAnnotation(RepresentativeAnnotation(representative: rep, coordinate: boundary.centroid))
             }
             // Note: Governors loop removed.
-            print("🗺️ [Map] rebuildAnnotations — reps=\(parent.allRepresentatives.count), annotations on map=\(mapView.annotations.count)")
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
@@ -676,30 +665,6 @@ struct DistrictMapRepresentable: UIViewRepresentable {
 
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
             updateAnnotationVisibility(on: mapView)
-        }
-
-        // MARK: Tile-load diagnostics
-        // These fire as MapKit fetches the base map imagery. If the map is grey,
-        // watch for "did FAIL" (or "will start" with no matching "did finish") —
-        // that pinpoints a base-tile loading problem rather than an overlay/region one.
-        func mapViewWillStartLoadingMap(_ mapView: MKMapView) {
-            print("🗺️ [Map] tiles: will start loading")
-        }
-
-        func mapViewDidFinishLoadingMap(_ mapView: MKMapView) {
-            print("🗺️ [Map] tiles: did finish loading")
-        }
-
-        func mapViewDidFailLoadingMap(_ mapView: MKMapView, withError error: Error) {
-            print("🗺️ [Map] tiles: DID FAIL loading — \(error.localizedDescription)")
-        }
-
-        func mapViewWillStartRenderingMap(_ mapView: MKMapView) {
-            print("🗺️ [Map] tiles: will start rendering")
-        }
-
-        func mapViewDidFinishRenderingMap(_ mapView: MKMapView, fullyRendered: Bool) {
-            print("🗺️ [Map] tiles: did finish rendering (fullyRendered=\(fullyRendered))")
         }
 
         private func updateCenteredState(for region: MKCoordinateRegion) {
@@ -963,6 +928,24 @@ final class FlagOverlayRenderer: MKOverlayRenderer {
 #endif
 
 /// The sheet shown when a district is tapped: its name beside a copy of its
+/// Renders one `"Name — Value"` entry (the format the city and university
+/// directories produce) with the name and value pushed to opposite edges via a
+/// `Spacer`, matching the demographics and industries rows. Entries without a
+/// value separator render as a plain leading label.
+@ViewBuilder
+private func spacedStatRow(_ entry: String) -> some View {
+    let parts = entry.components(separatedBy: " — ")
+    HStack {
+        Text(parts[0])
+        if parts.count > 1 {
+            Spacer()
+            Text(parts.dropFirst().joined(separator: " — "))
+        }
+    }
+    .font(.subheadline)
+    .foregroundStyle(.secondary)
+}
+
 /// outline, with the district's representative underneath.
 private struct DistrictDetailSheet: View {
     let boundary: MapBoundary
@@ -1000,6 +983,22 @@ private struct DistrictDetailSheet: View {
         return formatter
     }()
 
+    /// The outline's on-screen size: scaled to fill a 100pt box on its longer
+    /// axis while keeping the district's true proportions, then trimmed to the
+    /// outline's actual extent on the shorter axis. Sizing the frame to this (vs.
+    /// a fixed 100×100) leaves no slack, so the outline sits flush in the corner
+    /// and `FloatingCornerLayout`'s wrap zone matches its real height.
+    private var outlineSize: CGSize {
+        let maxDimension: CGFloat = 100
+        let aspect = DistrictOutlineShape.aspectRatio(for: boundary.rings)
+        guard aspect.isFinite, aspect > 0 else {
+            return CGSize(width: maxDimension, height: maxDimension)
+        }
+        return aspect >= 1
+            ? CGSize(width: maxDimension, height: maxDimension / aspect)
+            : CGSize(width: maxDimension * aspect, height: maxDimension)
+    }
+
     /// A labeled list of the district's headline Census demographics, with any
     /// figures the API couldn't compute omitted.
     @ViewBuilder
@@ -1022,6 +1021,9 @@ private struct DistrictDetailSheet: View {
             },
         ].compactMap { $0 }
 
+        // Header and rows are wrapped in a tightly-spaced VStack so the section
+        // reads as one group, with the surrounding stack providing the wider gap
+        // that separates it from neighboring sections.
         if !rows.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Demographics")
@@ -1038,77 +1040,172 @@ private struct DistrictDetailSheet: View {
             }
         }
     }
-
+    
+    @State private var titleIsMultiLine = false
+    
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                HStack(alignment: .top, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(boundary.displayName)
-                            .font(.title2.bold())
-                        
-                        Divider()
-                            .padding(8)
-                        
-                        if let population {
-                            Text("Population: \(Self.populationFormatter.string(from: NSNumber(value: population)) ?? "\(population)")")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        
-                        if let demographics {
-                            demographicsSection(demographics)
-                        }
-                        
-                        if let topCities, !topCities.isEmpty {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Top Cities")
-                                    .font(.subheadline.bold())
-                                ForEach(topCities, id: \.self) { city in
-                                    Text(city)
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
+                VStack(alignment: .leading, spacing: 12) {
+                /*Text(boundary.displayName)
+                    .font(.title2.bold())
+                    .frame(maxWidth: .infinity, alignment: .center)
 
-                        if let topIndustries, !topIndustries.isEmpty {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Top Industries")
-                                    .font(.subheadline.bold())
-                                ForEach(topIndustries, id: \.name) { industry in
-                                    HStack {
-                                        Text(industry.name)
-                                        Spacer()
-                                        Text(industry.share, format: .percent.precision(.fractionLength(0)))
-                                    }
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
+                Divider()*/
 
-                        if let topUniversities, !topUniversities.isEmpty {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Top Universities")
-                                    .font(.subheadline.bold())
-                                ForEach(topUniversities, id: \.self) { university in
-                                    Text(university)
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
+                FloatingCornerLayout(spacing: 16, floatSpacing: 16) {
+                    // First subview is the floater, pinned to the top-right corner.
+                    DistrictOutlineShape(rings: boundary.rings)
+                        .fill(color.opacity(0.3))
+                        .overlay(DistrictOutlineShape(rings: boundary.rings).stroke(color, lineWidth: 1.5))
+                        .frame(width: outlineSize.width, height: outlineSize.height)
+
+                    // 2. The main text content
+                    Group {
+                        if titleIsMultiLine {
+                            Text(boundary.displayName)
+                        } else {
+                            Text(splitAfterFirstWord(boundary.displayName))
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .font(.title2.bold())
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .background {
+                        // 3. Measurement logic moved to the background.
+                        // Backgrounds don't participate in the layout sequence,
+                        // completely nullifying the unwanted 16 spacing.
+                        ViewThatFits(in: .horizontal) {
+                            Text(boundary.displayName) // Option A: Fits completely on one line
+                                .font(.title2.bold())
+                                .lineLimit(1)
+                                .onAppear { titleIsMultiLine = false }
+                            
+                            Color.clear // Option B: Text wraps, fallback triggered
+                                .onAppear { titleIsMultiLine = true }
+                        }
+                        .hidden() // Hides it visually, but still evaluates the sizing
+                    }
+
+                    Divider()
+
+                    /*if let population {
+                        Text("Population: \(Self.populationFormatter.string(from: NSNumber(value: population)) ?? "\(population)")")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }*/
+
+                    if let topCities, !topCities.isEmpty {
+                        Text("Top Cities")
+                            .font(.subheadline.bold())
+                        ForEach(topCities, id: \.self) { city in
+                            spacedStatRow(city)
+                                .flowGap(4)
+                        }
+                    }
+
+                    if let demographics {
+                        demographicsSection(demographics)
+                    }
+
+                    if let topIndustries, !topIndustries.isEmpty {
+                        Text("Top Industries")
+                            .font(.subheadline.bold())
+                        ForEach(topIndustries, id: \.name) { industry in
+                            HStack {
+                                Text(industry.name)
+                                Spacer()
+                                Text(industry.share, format: .percent.precision(.fractionLength(0)))
+                            }
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .flowGap(4)
+                        }
+                    }
+
+                    if let topUniversities, !topUniversities.isEmpty {
+                        Text("Top Universities")
+                            .font(.subheadline.bold())
+                        ForEach(topUniversities, id: \.self) { university in
+                            spacedStatRow(university)
+                                .flowGap(4)
+                        }
+                    }
+                }
+                //.frame(maxWidth: .infinity, alignment: .leading)
+                /*
+
+                // Title and top divider sit beside the district outline; all of the
+                // district's information stacks below this header row.
+                HStack(alignment: .top, spacing: 16) {
+                    VStack {
+                        Spacer()
+                        
+                        Text(boundary.displayName)
+                            .font(.title2.bold())
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                        
+                        Spacer()
+
+                        Divider()
+                        
+                        Spacer()
+                        Spacer()
+                    }
 
                     DistrictOutlineShape(rings: boundary.rings)
                         .fill(color.opacity(0.3))
                         .overlay(DistrictOutlineShape(rings: boundary.rings).stroke(color, lineWidth: 1.5))
-                        .frame(width: 100, height: 100)
+                        .frame(width: outlineSize.width, height: outlineSize.height)
                 }
+
+                // Wider spacing between sections; each section groups its header
+                // and rows tightly in its own VStack.
+                VStack(alignment: .leading, spacing: 20) {
+                    if let topCities, !topCities.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Top Cities")
+                                .font(.subheadline.bold())
+                            ForEach(topCities, id: \.self) { city in
+                                spacedStatRow(city)
+                            }
+                        }
+                    }
+
+                    if let demographics {
+                        demographicsSection(demographics)
+                    }
+
+                    if let topIndustries, !topIndustries.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Top Industries")
+                                .font(.subheadline.bold())
+                            ForEach(topIndustries, id: \.name) { industry in
+                                HStack {
+                                    Text(industry.name)
+                                    Spacer()
+                                    Text(industry.share, format: .percent.precision(.fractionLength(0)))
+                                }
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+
+                    if let topUniversities, !topUniversities.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Top Universities")
+                                .font(.subheadline.bold())
+                            ForEach(topUniversities, id: \.self) { university in
+                                spacedStatRow(university)
+                            }
+                        }
+                    }
+                }*/
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .task {
+                    print("District outline height: \(outlineSize.height) — \(boundary.displayName)")
                     await populationDirectory.loadIfNeeded(state: boundary.state, district: boundary.district ?? 0)
                     await demographicsDirectory.loadIfNeeded(state: boundary.state, district: boundary.district ?? 0)
                     await industryDirectory.loadIfNeeded(state: boundary.state, district: boundary.district ?? 0)
@@ -1129,8 +1226,8 @@ private struct DistrictDetailSheet: View {
                         .foregroundStyle(.secondary)
                 }
                 }
-                .padding(16)
-                .padding(.top, 16)
+                .padding(.horizontal, 28)
+                .padding(.top, 24)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .navigationDestination(for: Representative.self) { rep in
@@ -1138,6 +1235,19 @@ private struct DistrictDetailSheet: View {
             }
         }
     }
+    
+    func splitAfterFirstWord(_ text: String) -> String {
+        // Find the first space in the string
+        if let firstSpaceIndex = text.firstIndex(of: " ") {
+            var modifiedText = text
+            // Replace the space at that position with a newline character
+            modifiedText.replaceSubrange(firstSpaceIndex...firstSpaceIndex, with: "\n")
+            return modifiedText
+        }
+        // Return original text if it is only one word long
+        return text
+    }
+
 }
 
 /// The sheet shown when a state is tapped at state-level zoom: its name beside a
@@ -1225,9 +1335,7 @@ private struct StateDetailSheet: View {
                             Text("Top Cities")
                                 .font(.subheadline.bold())
                             ForEach(topCities, id: \.self) { city in
-                                Text(city)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                spacedStatRow(city)
                             }
                         }
                     }
@@ -1237,9 +1345,7 @@ private struct StateDetailSheet: View {
                             Text("Top Universities")
                                 .font(.subheadline.bold())
                             ForEach(topUniversities, id: \.self) { university in
-                                Text(university)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                spacedStatRow(university)
                             }
                         }
                     }
@@ -1304,11 +1410,110 @@ private struct StateDetailSheet: View {
     }
 }
 
+/// Flows a vertical stack of subviews around a floating element pinned to the
+/// top-trailing corner. The *first* subview is the floater; the rest stack down
+/// the leading edge, staying narrow (leaving room for the floater) while they sit
+/// beside it and reclaiming the full width once they clear the floater's bottom.
+/// This gives a "text wraps around the outline" effect that neither `HStack` nor
+/// `VStack` can produce on their own.
+///
+/// Because it flows its *direct* subviews individually, a section's header and
+/// each of its rows must be passed as separate subviews (not wrapped in a
+/// `VStack`) for the rows themselves — not just the whole section — to reclaim
+/// the full width once they clear the floater. Tighter within-section spacing is
+/// expressed per-row with `.flowGap(_:)`, which overrides the default `spacing`.
+private struct FloatingCornerLayout: Layout {
+    /// Default vertical gap before a flowing subview, used when the subview does
+    /// not specify its own `.flowGap(_:)`.
+    var spacing: CGFloat = 4
+    /// Horizontal gap kept between the flowing text and the floating element.
+    var floatSpacing: CGFloat = 16
+
+    private func floatSize(_ subviews: Subviews) -> CGSize {
+        subviews.first?.sizeThatFits(.unspecified) ?? .zero
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) -> CGSize {
+        let width = proposal.replacingUnspecifiedDimensions().width
+        let floater = floatSize(subviews)
+        var y: CGFloat = 0
+        for (index, sub) in subviews.dropFirst().enumerated() {
+            if index > 0 { y += (sub[FlowGap.self] ?? spacing) }
+            let inset = y < floater.height
+            let availableWidth = inset ? max(0, width - floater.width - floatSpacing) : width
+            y += sub.sizeThatFits(ProposedViewSize(width: availableWidth, height: nil)).height
+        }
+        return CGSize(width: width, height: max(y, floater.height))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
+        let floater = floatSize(subviews)
+        if let float = subviews.first {
+            float.place(
+                at: CGPoint(x: bounds.maxX - floater.width, y: bounds.minY),
+                proposal: ProposedViewSize(floater)
+            )
+        }
+        var y: CGFloat = 0
+        for (index, sub) in subviews.dropFirst().enumerated() {
+            if index > 0 { y += (sub[FlowGap.self] ?? spacing) }
+            let inset = y < floater.height
+            let availableWidth = inset ? max(0, bounds.width - floater.width - floatSpacing) : bounds.width
+            let size = sub.sizeThatFits(ProposedViewSize(width: availableWidth, height: nil))
+            sub.place(
+                at: CGPoint(x: bounds.minX, y: bounds.minY + y),
+                proposal: ProposedViewSize(width: availableWidth, height: size.height)
+            )
+            y += size.height
+        }
+    }
+}
+
+/// A per-subview override for the vertical gap `FloatingCornerLayout` leaves
+/// before a flowing subview. `nil` means "use the layout's default `spacing`".
+private struct FlowGap: LayoutValueKey {
+    static let defaultValue: CGFloat? = nil
+}
+
+private extension View {
+    /// Overrides the gap `FloatingCornerLayout` leaves before this subview — used
+    /// to hug a section's rows tightly under its header while sections stay
+    /// separated by the layout's default spacing.
+    func flowGap(_ gap: CGFloat) -> some View {
+        layoutValue(key: FlowGap.self, value: gap)
+    }
+}
+
 /// Draws a district's boundary rings scaled to fit within the shape's rect,
 /// preserving aspect ratio — a small "thumbnail" copy of the outline shown on
 /// the map.
 private struct DistrictOutlineShape: Shape {
     let rings: [[CLLocationCoordinate2D]]
+
+    /// The width-to-height ratio of the outline as it's drawn (longitude
+    /// compressed by cos(latitude), antimeridian unwrapped) — lets a caller size
+    /// the frame to the outline's true proportions so there's no slack around it.
+    static func aspectRatio(for rings: [[CLLocationCoordinate2D]]) -> CGFloat {
+        let points = rings.flatMap { $0 }
+        guard let minLat = points.map(\.latitude).min(),
+              let maxLat = points.map(\.latitude).max(),
+              let rawMinLon = points.map(\.longitude).min(),
+              let rawMaxLon = points.map(\.longitude).max()
+        else { return 1 }
+
+        let crossesAntimeridian = rawMaxLon - rawMinLon > 180
+        func unwrap(_ longitude: Double) -> Double {
+            crossesAntimeridian && longitude < 0 ? longitude + 360 : longitude
+        }
+        let minLon = crossesAntimeridian ? points.map { unwrap($0.longitude) }.min()! : rawMinLon
+        let maxLon = crossesAntimeridian ? points.map { unwrap($0.longitude) }.max()! : rawMaxLon
+
+        let midLat = (minLat + maxLat) / 2
+        let lonScale = max(cos(midLat * .pi / 180), .ulpOfOne)
+        let latSpan = max(maxLat - minLat, .ulpOfOne)
+        let lonSpan = max((maxLon - minLon) * lonScale, .ulpOfOne)
+        return CGFloat(lonSpan / latSpan)
+    }
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
