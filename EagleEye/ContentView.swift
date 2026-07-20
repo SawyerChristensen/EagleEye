@@ -29,13 +29,28 @@ struct ContentView: View {
     @State private var hideOnboardingText = false
     @State private var dragOnboardingUp = false
 
+    @Environment(\.scenePhase) private var scenePhase
+
     var body: some View {
         ZStack {
             content
                 .onOpenURL(perform: handleWidgetURL)
-            
+
             if !hasCompletedOnboarding {
                 onboardingView
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            switch newPhase {
+            case .active:
+                // Returning to the foreground re-checks bookmarked bills and
+                // new laws; the initial launch is already covered by `.task`.
+                Task { await refreshBills() }
+            case .background:
+                // Ask iOS to wake us later so the same checks run while suspended.
+                BillRefreshScheduler.scheduleAppRefresh()
+            default:
+                break
             }
         }
     }
@@ -235,7 +250,7 @@ struct ContentView: View {
         .ignoresSafeArea()
     }
     
-    private func executeOnboardingTransition() {
+    private func executeOnboardingTransition() { //add timing curve
         withAnimation(.easeOut(duration: 0.6)) {
             hideOnboardingText = true
         }
@@ -254,7 +269,9 @@ struct ContentView: View {
     /// notifying the user if so.
     private func refreshBills() async {
         await billsStore.load()
-        bookmarksStore.checkForUpdates(in: billsStore.bills)
+        // Also re-fetches bookmarked bills that have dropped out of the feed, so
+        // their tracking stays current even when they're no longer recent.
+        await bookmarksStore.refresh(feedBills: billsStore.bills)
         enactedLawsNotifier.checkForNewlyEnacted(in: billsStore.bills)
     }
 

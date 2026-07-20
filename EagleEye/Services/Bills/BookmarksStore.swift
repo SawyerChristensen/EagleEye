@@ -20,7 +20,11 @@ final class BookmarksStore {
     /// keyed by `Bill.stableKey`, so a later refresh can tell whether it changed.
     private var lastKnownSnapshots: [String: String] = [:]
 
-    init() {
+    /// Used to re-fetch bookmarked bills that have dropped out of the recent feed.
+    private let service: CongressService
+
+    init(service: CongressService = CongressService()) {
+        self.service = service
         bookmarkedKeys = Self.loadBookmarks()
         lastKnownSnapshots = Self.loadSnapshots()
     }
@@ -48,19 +52,59 @@ final class BookmarksStore {
         Self.saveSnapshots(lastKnownSnapshots)
     }
 
+    /// Brings every bookmarked bill up to date and notifies about any that
+    /// changed. Bills still present in the recent feed are read straight from
+    /// `feedBills`; bookmarks that have since dropped out of the feed are fetched
+    /// individually by identifier, so tracking never goes stale just because a
+    /// bill scrolled off the top of Congress's recent-activity list. Safe to run
+    /// from a background refresh — the store is entirely UserDefaults-backed.
+    func refresh(feedBills: [Bill]) async {
+        guard !bookmarkedKeys.isEmpty else { return }
+
+        let feedByKey = Dictionary(
+            feedBills.compactMap { bill in bill.stableKey.map { ($0, bill) } },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        var bills: [Bill] = []
+        for key in bookmarkedKeys {
+            if let inFeed = feedByKey[key] {
+                bills.append(inFeed)
+            } else if let reference = Self.reference(fromKey: key),
+                      let fetched = await service.billDetail(for: reference) {
+                bills.append(fetched)
+            }
+        }
+        checkForUpdates(in: bills)
+    }
+
     /// Compares freshly fetched bills against the last known status of each
     /// bookmarked bill and fires a local notification for anything that changed.
+    /// Once a bookmarked bill reaches a dead end — defeated on the floor, or
+    /// signed into law — its bookmark is dropped after the user is notified of
+    /// the outcome, since there's no further progress left to track.
     func checkForUpdates(in bills: [Bill]) {
         guard !bookmarkedKeys.isEmpty else { return }
+        var terminalKeys: [String] = []
         for bill in bills {
             guard let key = bill.stableKey, bookmarkedKeys.contains(key) else { continue }
             let current = Self.snapshot(for: bill)
             if let previous = lastKnownSnapshots[key], previous != current {
                 notify(about: bill)
+                if bill.failed || bill.status == .enacted {
+                    terminalKeys.append(key)
+                }
             }
             lastKnownSnapshots[key] = current
         }
+        for key in terminalKeys {
+            bookmarkedKeys.remove(key)
+            lastKnownSnapshots.removeValue(forKey: key)
+        }
         Self.saveSnapshots(lastKnownSnapshots)
+        if !terminalKeys.isEmpty {
+            Self.saveBookmarks(bookmarkedKeys)
+        }
     }
 
     /// A comparable fingerprint of a bill's standing: its stage plus whichever
@@ -83,6 +127,21 @@ final class BookmarksStore {
 
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
+    }
+
+    /// Rebuilds a `LegislationRef` from a persisted bookmark key (e.g.
+    /// "119-HR-1842") so a bookmarked bill can be re-fetched by identifier.
+    /// Keys always come from `Bill.stableKey`, which joins the numeric congress,
+    /// the alphabetic measure type, and the numeric measure number with hyphens.
+    private static func reference(fromKey key: String) -> LegislationRef? {
+        let parts = key.split(separator: "-", maxSplits: 2, omittingEmptySubsequences: false)
+        guard parts.count == 3, let congress = Int(parts[0]) else { return nil }
+        return LegislationRef(
+            congress: congress,
+            type: String(parts[1]),
+            number: String(parts[2]),
+            title: ""
+        )
     }
 
     // MARK: - Persistence

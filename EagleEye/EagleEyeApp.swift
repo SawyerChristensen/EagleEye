@@ -25,5 +25,12 @@ struct EagleEyeApp: App {
         WindowGroup {
             ContentView()
         }
+        // Refresh the feed in the background so bookmarked-bill and new-law
+        // notifications fire even while the app is suspended. iOS registers the
+        // handler for this identifier automatically; ContentView submits the
+        // requests as the app backgrounds.
+        .backgroundTask(.appRefresh(BillRefreshScheduler.taskIdentifier)) {
+            await BillRefreshScheduler.handleAppRefresh()
+        }
     }
 }
