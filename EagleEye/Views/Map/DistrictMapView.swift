@@ -21,8 +21,16 @@ struct DistrictMapView: View {
     /// boundary parsing and lookup finish.
     let userCoordinate: CLLocationCoordinate2D?
 
-    @State private var stateBoundaries: [MapBoundary] = []
-    @State private var districtBoundaries: [MapBoundary] = []
+    /// Shared, prefetched map data (boundaries + national rosters), warmed by
+    /// `ContentView` in the background so this tab opens instantly. The rest of
+    /// the view reads it through the accessors below and is otherwise unchanged.
+    let mapData: MapDataStore
+
+    private var stateBoundaries: [MapBoundary] { mapData.stateBoundaries }
+    private var districtBoundaries: [MapBoundary] { mapData.districtBoundaries }
+    private var nationalHouseDirectory: NationalHouseDirectory { mapData.nationalHouseDirectory }
+    private var nationalSenateDirectory: NationalSenateDirectory { mapData.nationalSenateDirectory }
+
     @State private var selectedDistrict: MapBoundary?
     @State private var selectedState: MapBoundary?
     @State private var hasSetInitialRegion = false
@@ -40,8 +48,6 @@ struct DistrictMapView: View {
     /// `partyByDistrict`, rebuilt only when the underlying roster actually
     /// changes rather than on every access.
     @State private var partyByDistrictCache: [String: Party] = [:]
-    @State private var nationalHouseDirectory = NationalHouseDirectory()
-    @State private var nationalSenateDirectory = NationalSenateDirectory()
     @State private var populationDirectory = DistrictPopulationDirectory()
     @State private var demographicsDirectory = DistrictDemographicsDirectory()
     @State private var industryDirectory = DistrictIndustryDirectory()
@@ -116,17 +122,12 @@ struct DistrictMapView: View {
                     hasSetInitialRegion = true
                     initialRegion = wideRegion(centeredOn: userCoordinate)
                 }
-                async let nationalHouseLoad: Void = nationalHouseDirectory.loadIfNeeded()
-                async let nationalSenateLoad: Void = nationalSenateDirectory.loadIfNeeded()
-                if districtBoundaries.isEmpty, stateBoundaries.isEmpty {
-                    async let districts = Task.detached(priority: .userInitiated) { BoundaryLoader.loadDistricts() }.value
-                    async let states = Task.detached(priority: .userInitiated) { BoundaryLoader.loadStates() }.value
-                    districtBoundaries = await districts
-                    stateBoundaries = await states
-                    centerOnUserDistrictIfNeeded()
-                }
-                await nationalHouseLoad
-                await nationalSenateLoad
+                // Boundaries and rosters are normally already warm from the
+                // launch prefetch; this awaits that work (or runs it now if the
+                // user reached the map before it finished). `prefetch()` is
+                // idempotent, so a completed prefetch returns immediately.
+                await mapData.prefetch()
+                centerOnUserDistrictIfNeeded()
                 rebuildPartyByDistrictCache()
                 // Portraits load on demand: MapKit builds a pin's view only when
                 // it scrolls on screen, and CachedAsyncImage fetches then. No bulk
@@ -413,9 +414,6 @@ struct DistrictMapRepresentable: UIViewRepresentable {
         private var overlayRoles: [ObjectIdentifier: Role] = [:]
         private var renderers: [ObjectIdentifier: MKOverlayRenderer] = [:]
         
-        private var districtPolygonCache: [String: [MKPolygon]] = [:]
-        private var statePolygonCache: [MKPolygon] = []
-        
         /// Pre-clipped flag bitmaps keyed by state, kept so they survive an overlay
         /// rebuild (color-scheme change) without re-clipping.
         //private var clippedFlags: [String: ClippedFlag] = [:]
@@ -438,104 +436,32 @@ struct DistrictMapRepresentable: UIViewRepresentable {
             overlayRoles.removeAll()
             renderers.removeAll()
 
-            // Border smoothing (Douglas-Peucker simplification) disabled for now:
-            // each district's rings are simplified independently, so shared borders
-            // with neighbouring districts no longer line up and small districts look
-            // off. Restore `Self.overlaySimplifyTolerance` to re-enable it later.
-            let tolerance = 0.0 // Self.overlaySimplifyTolerance
+            // The polygons themselves were already built off the main thread when
+            // the boundaries loaded (see `MapBoundary.fillPolygons`). Here we only
+            // wrap each boundary's polygons in an `MKMultiPolygon` and hand them to
+            // MapKit — no vertex copying — then add them in one batch per level.
 
-            // 1. Cache Geometry if needed (only runs once)
-            if districtPolygonCache.isEmpty {
-                for boundary in parent.districtBoundaries {
-                    let key = DistrictMapView.districtKey(state: boundary.state, district: boundary.district)
-                    districtPolygonCache[key] = Self.polygons(for: boundary, simplifyTolerance: tolerance)
-                }
-                statePolygonCache = parent.stateBoundaries.flatMap {
-                    Self.polygons(for: $0, simplifyTolerance: tolerance)
-                }
-            }
-
-            // 2. Build the MultiPolygons per DISTRICT, not per party
+            // District fills, colored by party.
+            var districtOverlays: [MKMultiPolygon] = []
             for boundary in parent.districtBoundaries {
                 let key = DistrictMapView.districtKey(state: boundary.state, district: boundary.district)
                 guard let party = parent.partyByDistrict[key],
-                      let polygons = districtPolygonCache[key],
-                      !polygons.isEmpty else { continue }
-                
-                // Create an overlay specifically for this district
-                let overlay = MKMultiPolygon(polygons)
-                
-                // Track the role (fill color) using the exact same logic you already had
+                      !boundary.fillPolygons.isEmpty else { continue }
+                let overlay = MKMultiPolygon(boundary.fillPolygons)
                 overlayRoles[ObjectIdentifier(overlay)] = .fill(party)
-                mapView.addOverlay(overlay, level: .aboveLabels)
+                districtOverlays.append(overlay)
             }
+            mapView.addOverlays(districtOverlays, level: .aboveLabels)
 
-            // 3. Keep state outlines as they are (or separate them by state if you haven't already)
-            // Note: It's better to add state borders individually too, rather than one massive country-wide array.
+            // State outlines, one overlay per state.
+            var stateOverlays: [MKMultiPolygon] = []
             for boundary in parent.stateBoundaries {
-                let polygons = Self.polygons(for: boundary, simplifyTolerance: tolerance)
-                guard !polygons.isEmpty else { continue }
-
-                let overlay = MKMultiPolygon(polygons)
+                guard !boundary.fillPolygons.isEmpty else { continue }
+                let overlay = MKMultiPolygon(boundary.fillPolygons)
                 overlayRoles[ObjectIdentifier(overlay)] = .stateOutline
-                mapView.addOverlay(overlay, level: .aboveLabels)
+                stateOverlays.append(overlay)
             }
-        }
-
-        private static let overlaySimplifyTolerance: Double = 0.01
-
-        nonisolated private static func polygons(for boundary: MapBoundary, simplifyTolerance: Double = 0) -> [MKPolygon] {
-            boundary.rings.compactMap { ring in
-                guard ring.count > 2 else { return nil }
-                let points = simplifyTolerance > 0 ? simplify(ring, tolerance: simplifyTolerance) : ring
-                guard points.count > 2 else { return nil }
-                return MKPolygon(coordinates: points, count: points.count)
-            }
-        }
-
-        nonisolated private static func simplify(_ points: [CLLocationCoordinate2D], tolerance: Double) -> [CLLocationCoordinate2D] {
-            guard points.count > 2 else { return points }
-            let end = points.count - 1
-            var dmaxSquared = 0.0
-            var index = 0
-            
-            for i in 1..<end {
-                let dSquared = perpendicularDistanceSquared(points[i], lineStart: points[0], lineEnd: points[end])
-                if dSquared > dmaxSquared {
-                    index = i
-                    dmaxSquared = dSquared
-                }
-            }
-            
-            // Compare against tolerance squared!
-            if dmaxSquared > (tolerance * tolerance) {
-                let left = simplify(Array(points[0...index]), tolerance: tolerance)
-                let right = simplify(Array(points[index...end]), tolerance: tolerance)
-                return left.dropLast() + right
-            }
-            return [points[0], points[end]]
-        }
-
-        nonisolated private static func perpendicularDistanceSquared(
-            _ point: CLLocationCoordinate2D,
-            lineStart: CLLocationCoordinate2D,
-            lineEnd: CLLocationCoordinate2D
-        ) -> Double {
-            let dx = lineEnd.longitude - lineStart.longitude
-            let dy = lineEnd.latitude - lineStart.latitude
-            let lengthSquared = dx * dx + dy * dy
-            
-            guard lengthSquared > 0 else {
-                let px = point.longitude - lineStart.longitude
-                let py = point.latitude - lineStart.latitude
-                return px * px + py * py
-            }
-            
-            let crossProduct = dy * point.longitude - dx * point.latitude
-                             + lineEnd.longitude * lineStart.latitude
-                             - lineEnd.latitude * lineStart.longitude
-                             
-            return (crossProduct * crossProduct) / lengthSquared
+            mapView.addOverlays(stateOverlays, level: .aboveLabels)
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
@@ -1042,143 +968,89 @@ private struct DistrictDetailSheet: View {
     }
     
     @State private var titleIsMultiLine = false
+    @State private var isLoadingCities = true
+    @State private var isLoadingDemographics = true
+    @State private var isLoadingIndustries = true
+    @State private var isLoadingUniversities = true
     
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                /*Text(boundary.displayName)
-                    .font(.title2.bold())
-                    .frame(maxWidth: .infinity, alignment: .center)
-
-                Divider()*/
-
-                FloatingCornerLayout(spacing: 16, floatSpacing: 16) {
-                    // First subview is the floater, pinned to the top-right corner.
-                    DistrictOutlineShape(rings: boundary.rings)
-                        .fill(color.opacity(0.3))
-                        .overlay(DistrictOutlineShape(rings: boundary.rings).stroke(color, lineWidth: 1.5))
-                        .frame(width: outlineSize.width, height: outlineSize.height)
-
-                    // 2. The main text content
-                    Group {
-                        if titleIsMultiLine {
-                            Text(boundary.displayName)
-                        } else {
-                            Text(splitAfterFirstWord(boundary.displayName))
-                        }
-                    }
-                    .font(.title2.bold())
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .background {
-                        // 3. Measurement logic moved to the background.
-                        // Backgrounds don't participate in the layout sequence,
-                        // completely nullifying the unwanted 16 spacing.
-                        ViewThatFits(in: .horizontal) {
-                            Text(boundary.displayName) // Option A: Fits completely on one line
-                                .font(.title2.bold())
-                                .lineLimit(1)
-                                .onAppear { titleIsMultiLine = false }
-                            
-                            Color.clear // Option B: Text wraps, fallback triggered
-                                .onAppear { titleIsMultiLine = true }
-                        }
-                        .hidden() // Hides it visually, but still evaluates the sizing
-                    }
-
-                    Divider()
-
-                    /*if let population {
-                        Text("Population: \(Self.populationFormatter.string(from: NSNumber(value: population)) ?? "\(population)")")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }*/
-
-                    if let topCities, !topCities.isEmpty {
-                        Text("Top Cities")
-                            .font(.subheadline.bold())
-                        ForEach(topCities, id: \.self) { city in
-                            spacedStatRow(city)
-                                .flowGap(4)
-                        }
-                    }
-
-                    if let demographics {
-                        demographicsSection(demographics)
-                    }
-
-                    if let topIndustries, !topIndustries.isEmpty {
-                        Text("Top Industries")
-                            .font(.subheadline.bold())
-                        ForEach(topIndustries, id: \.name) { industry in
-                            HStack {
-                                Text(industry.name)
-                                Spacer()
-                                Text(industry.share, format: .percent.precision(.fractionLength(0)))
+                    FloatingCornerLayout(spacing: 16, floatSpacing: 16) {
+                        
+                        DistrictOutlineShape(rings: boundary.rings) // First subview is the floater, pinned to the top-right corner
+                            .fill(color.opacity(0.3))
+                            .overlay(DistrictOutlineShape(rings: boundary.rings).stroke(color, lineWidth: 1.5))
+                            .frame(width: outlineSize.width, height: outlineSize.height)
+                        
+                        Group {
+                            if titleIsMultiLine {
+                                Text(boundary.displayName)
+                            } else {
+                                Text(splitAfterFirstWord(boundary.displayName))
                             }
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .flowGap(4)
                         }
-                    }
-
-                    if let topUniversities, !topUniversities.isEmpty {
-                        Text("Top Universities")
-                            .font(.subheadline.bold())
-                        ForEach(topUniversities, id: \.self) { university in
-                            spacedStatRow(university)
-                                .flowGap(4)
+                        .font(.title2.bold())
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .background {
+                            // Measurement logic moved to the background. Backgrounds don't participate in the layout sequence, completely nullifying the unwanted 16 spacing.
+                            ViewThatFits(in: .horizontal) {
+                                Text(boundary.displayName) // Option A: Fits completely on one line
+                                    .font(.title2.bold())
+                                    .lineLimit(1)
+                                    .onAppear { titleIsMultiLine = false }
+                                
+                                Color.clear // Option B: Text wraps, fallback triggered
+                                    .onAppear { titleIsMultiLine = true }
+                            }
+                            .hidden() // Hides it visually, but still evaluates the sizing
                         }
-                    }
-                }
-                //.frame(maxWidth: .infinity, alignment: .leading)
-                /*
-
-                // Title and top divider sit beside the district outline; all of the
-                // district's information stacks below this header row.
-                HStack(alignment: .top, spacing: 16) {
-                    VStack {
-                        Spacer()
                         
-                        Text(boundary.displayName)
-                            .font(.title2.bold())
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity, alignment: .center)
-                        
-                        Spacer()
-
                         Divider()
+                    
+                        /*if let population {
+                         Text("Population: \(Self.populationFormatter.string(from: NSNumber(value: population)) ?? "\(population)")")
+                         .font(.subheadline)
+                         .foregroundStyle(.secondary)
+                         }*/
                         
-                        Spacer()
-                        Spacer()
-                    }
-
-                    DistrictOutlineShape(rings: boundary.rings)
-                        .fill(color.opacity(0.3))
-                        .overlay(DistrictOutlineShape(rings: boundary.rings).stroke(color, lineWidth: 1.5))
-                        .frame(width: outlineSize.width, height: outlineSize.height)
-                }
-
-                // Wider spacing between sections; each section groups its header
-                // and rows tightly in its own VStack.
-                VStack(alignment: .leading, spacing: 20) {
-                    if let topCities, !topCities.isEmpty {
-                        VStack(alignment: .leading, spacing: 4) {
+                        // Cities Section
+                        if isLoadingCities {
+                            ProgressView("Loading cities...")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.vertical, 8)
+                        } else if let topCities, !topCities.isEmpty {
                             Text("Top Cities")
                                 .font(.subheadline.bold())
                             ForEach(topCities, id: \.self) { city in
                                 spacedStatRow(city)
+                                    .flowGap(4)
                             }
                         }
-                    }
-
-                    if let demographics {
-                        demographicsSection(demographics)
-                    }
-
-                    if let topIndustries, !topIndustries.isEmpty {
-                        VStack(alignment: .leading, spacing: 4) {
+                        
+                        // Demographics Section
+                        if isLoadingDemographics {
+                            ProgressView("Loading demographics...")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.vertical, 8)
+                        } else if let demographics {
+                            demographicsSection(demographics)
+                        }
+                        
+                        // Industries Section
+                        if isLoadingIndustries {
+                            ProgressView("Loading industries...")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.vertical, 8)
+                        } else if let topIndustries, !topIndustries.isEmpty {
                             Text("Top Industries")
                                 .font(.subheadline.bold())
                             ForEach(topIndustries, id: \.name) { industry in
@@ -1189,42 +1061,67 @@ private struct DistrictDetailSheet: View {
                                 }
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
+                                .flowGap(4)
                             }
                         }
-                    }
-
-                    if let topUniversities, !topUniversities.isEmpty {
-                        VStack(alignment: .leading, spacing: 4) {
+                        
+                        // Universities Section
+                        if isLoadingUniversities {
+                            ProgressView("Loading universities...")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.vertical, 8)
+                        } else if let topUniversities, !topUniversities.isEmpty {
                             Text("Top Universities")
                                 .font(.subheadline.bold())
                             ForEach(topUniversities, id: \.self) { university in
                                 spacedStatRow(university)
+                                    .flowGap(4)
                             }
                         }
                     }
-                }*/
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .task {
-                    print("District outline height: \(outlineSize.height) — \(boundary.displayName)")
-                    await populationDirectory.loadIfNeeded(state: boundary.state, district: boundary.district ?? 0)
-                    await demographicsDirectory.loadIfNeeded(state: boundary.state, district: boundary.district ?? 0)
-                    await industryDirectory.loadIfNeeded(state: boundary.state, district: boundary.district ?? 0)
-                    await cityDirectory.loadIfNeeded(boundary: boundary)
-                    await universityDirectory.loadIfNeeded(boundary: boundary)
-                }
-
-                Divider()
-
-                if let representative {
-                    NavigationLink(value: representative) {
-                        RepresentativeRow(representative: representative)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .task {
+                        await withTaskGroup(of: Void.self) { group in
+                            group.addTask {
+                                await populationDirectory.loadIfNeeded(state: boundary.state, district: boundary.district ?? 0)
+                            }
+                            
+                            group.addTask {
+                                await demographicsDirectory.loadIfNeeded(state: boundary.state, district: boundary.district ?? 0)
+                                await MainActor.run { withAnimation { isLoadingDemographics = false } }
+                            }
+                            
+                            group.addTask {
+                                await industryDirectory.loadIfNeeded(state: boundary.state, district: boundary.district ?? 0)
+                                await MainActor.run { withAnimation { isLoadingIndustries = false } }
+                            }
+                            
+                            group.addTask {
+                                await cityDirectory.loadIfNeeded(boundary: boundary)
+                                await MainActor.run { withAnimation { isLoadingCities = false } }
+                            }
+                            
+                            group.addTask {
+                                await universityDirectory.loadIfNeeded(boundary: boundary)
+                                await MainActor.run { withAnimation { isLoadingUniversities = false } }
+                            }
+                        }
                     }
-                    .buttonStyle(.plain)
-                } else {
-                    Text("No representative currently on file for this district.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+
+                    Divider()
+
+                    if let representative {
+                        NavigationLink(value: representative) {
+                            RepresentativeRow(representative: representative)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        Text("No representative currently on file for this district.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .padding(.horizontal, 28)
                 .padding(.top, 24)
@@ -1595,5 +1492,5 @@ private struct DistrictOutlineShape: Shape {
 }
 
 #Preview {
-    DistrictMapView(representatives: SampleData.representatives, userCoordinate: nil)
+    DistrictMapView(representatives: SampleData.representatives, userCoordinate: nil, mapData: MapDataStore())
 }

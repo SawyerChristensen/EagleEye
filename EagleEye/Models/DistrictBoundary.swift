@@ -26,6 +26,12 @@ struct MapBoundary: Identifiable {
     /// data MapKit has to buffer, so swapping to this cuts the Metal resource
     /// count dramatically when many boundaries are on screen at once.
     let coarseRings: [[CLLocationCoordinate2D]]
+    /// One full-detail `MKPolygon` per ring, ready to hand straight to MapKit as
+    /// a map overlay. Built here — during boundary loading, which runs off the
+    /// main thread — so the map's overlay rebuild only has to wrap these in an
+    /// `MKMultiPolygon` and add them, rather than copying every district's
+    /// vertices into MapKit on the main thread (the old ~2.5s map-tab stall).
+    let fillPolygons: [MKPolygon]
     /// This boundary's bounding box in Mercator map-point space, precomputed
     /// so the map can cheaply cull boundaries that don't intersect the
     /// visible viewport instead of handing every one to MapKit every frame.
@@ -41,18 +47,19 @@ struct MapBoundary: Identifiable {
         self.district = district
         self.rings = rings
         self.coarseRings = rings.map { BoundaryLoader.simplify($0, tolerance: Self.coarseTolerance) }
-        self.boundingBox = Self.boundingRect(of: rings)
-    }
-
-    /// Union of the map-point bounding boxes of every vertex in every ring.
-    private static func boundingRect(of rings: [[CLLocationCoordinate2D]]) -> MKMapRect {
+        // Build the overlay polygons once, here, and keep both them and the
+        // bounding box derived from them (MapKit computes `boundingMapRect` in
+        // optimized C). Rings with fewer than three points can't form a polygon.
+        let polygons = rings.compactMap { ring -> MKPolygon? in
+            guard ring.count > 2 else { return nil }
+            return MKPolygon(coordinates: ring, count: ring.count)
+        }
+        self.fillPolygons = polygons
         var rect = MKMapRect.null
-        for ring in rings {
-            // MKPolygon natively calculates the boundingMapRect for us in highly optimized C
-            let polygon = MKPolygon(coordinates: ring, count: ring.count)
+        for polygon in polygons {
             rect = rect.union(polygon.boundingMapRect)
         }
-        return rect
+        self.boundingBox = rect
     }
 
     /// A point near the geometric middle of this boundary, used to pin a
@@ -199,14 +206,14 @@ struct MapBoundary: Identifiable {
     }
 }
 
-private struct BoundaryFeatureDTO: Decodable {
+private struct BoundaryFeatureDTO: Codable {
     let id: String
     let state: String
     let district: Int?
     let rings: [[[Double]]]
 }
 
-private struct BoundaryCollectionDTO: Decodable {
+private struct BoundaryCollectionDTO: Codable {
     let features: [BoundaryFeatureDTO]
 }
 
@@ -229,6 +236,75 @@ enum BoundaryLoader {
 
     static func loadDistricts() -> [MapBoundary] {
         load(resource: "CongressionalDistricts")
+    }
+
+    // MARK: - Disk-cached loading
+
+    /// Bumped when the on-load simplification changes, so a stale cache from an
+    /// older build is ignored rather than decoded into the wrong geometry.
+    private static let cacheVersion = 1
+
+    /// Same as `loadStates()`, but decodes the persisted thinned geometry when
+    /// available so later launches skip the expensive bundle parse + simplify.
+    static func loadStatesCached() -> [MapBoundary] {
+        loadCached(resource: "StateBoundaries")
+    }
+
+    /// Same as `loadDistricts()`, backed by the on-disk simplified cache.
+    static func loadDistrictsCached() -> [MapBoundary] {
+        loadCached(resource: "CongressionalDistricts")
+    }
+
+    /// Returns the simplified boundaries from the Caches directory when a
+    /// version-matched file exists; otherwise runs the full bundle parse +
+    /// Douglas-Peucker pass once and persists the thinned result for next time.
+    /// Runs entirely off the main thread (callers dispatch it to a background
+    /// task); the cache is derived from immutable bundled files, so it only
+    /// needs invalidating across app versions via `cacheVersion`.
+    private static func loadCached(resource: String) -> [MapBoundary] {
+        if let url = cacheURL(for: resource),
+           let data = try? Data(contentsOf: url),
+           let collection = try? JSONDecoder().decode(BoundaryCollectionDTO.self, from: data) {
+            return collection.features.map(makeBoundary)
+        }
+        let boundaries = load(resource: resource)
+        persist(boundaries, for: resource)
+        return boundaries
+    }
+
+    private static func makeBoundary(from feature: BoundaryFeatureDTO) -> MapBoundary {
+        MapBoundary(
+            id: feature.id,
+            state: feature.state,
+            district: feature.district,
+            rings: feature.rings.map { ring in
+                ring.map { CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0]) }
+            }
+        )
+    }
+
+    private static func cacheURL(for resource: String) -> URL? {
+        guard let dir = try? FileManager.default.url(
+            for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true
+        ) else { return nil }
+        return dir.appendingPathComponent("\(resource)-simplified-v\(cacheVersion).json")
+    }
+
+    /// Writes the already-simplified rings back out in the same `[lng, lat]`
+    /// shape the bundle uses, so `loadCached` can round-trip them cheaply.
+    private static func persist(_ boundaries: [MapBoundary], for resource: String) {
+        guard !boundaries.isEmpty, let url = cacheURL(for: resource) else { return }
+        let collection = BoundaryCollectionDTO(features: boundaries.map { boundary in
+            BoundaryFeatureDTO(
+                id: boundary.id,
+                state: boundary.state,
+                district: boundary.district,
+                rings: boundary.rings.map { ring in ring.map { [$0.longitude, $0.latitude] } }
+            )
+        })
+        if let data = try? JSONEncoder().encode(collection) {
+            try? data.write(to: url, options: .atomic)
+        }
     }
 
     private static func load(resource: String) -> [MapBoundary] {

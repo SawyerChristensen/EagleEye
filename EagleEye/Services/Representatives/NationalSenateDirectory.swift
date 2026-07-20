@@ -20,9 +20,6 @@ final class NationalSenateDirectory {
 
     init(service: CongressService = CongressService()) {
         self.service = service
-        if let cached = Self.loadCache() {
-            members = cached
-        }
     }
 
     /// Fetches every current senator nationwide, once per app session — the
@@ -31,6 +28,9 @@ final class NationalSenateDirectory {
     /// API key configured).
     func loadIfNeeded() async {
         guard members.isEmpty else { return }
+        // Surface the persisted roster first (decoded off the main thread),
+        // then refresh from the API.
+        if let cached = await Self.loadCacheOffMain() { members = cached }
         guard let fetched = try? await service.allCurrentSenateMembers(), !fetched.isEmpty else { return }
         members = fetched
         Self.saveCache(fetched)
@@ -46,7 +46,7 @@ final class NationalSenateDirectory {
 
     // MARK: - Cache
 
-    private static let cacheKey = "cachedNationalSenateMembers"
+    nonisolated private static let cacheKey = "cachedNationalSenateMembers"
 
     /// Persists the roster on disk so it's available immediately (and offline)
     /// on the next launch, without waiting on a fresh fetch.
@@ -56,8 +56,14 @@ final class NationalSenateDirectory {
         }
     }
 
-    private static func loadCache() -> [Representative]? {
+    nonisolated private static func loadCache() -> [Representative]? {
         guard let data = UserDefaults.standard.data(forKey: cacheKey) else { return nil }
         return try? JSONDecoder().decode([Representative].self, from: data)
+    }
+
+    /// Decodes the cached roster on a background task so the JSON parse never
+    /// blocks the main thread during launch prefetch.
+    private static func loadCacheOffMain() async -> [Representative]? {
+        await Task.detached(priority: .utility) { loadCache() }.value
     }
 }

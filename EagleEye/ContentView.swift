@@ -17,6 +17,7 @@ struct ContentView: View {
     @State private var selection: AppTab = .home
     @State private var store = RepresentativesStore()
     @State private var billsStore = BillsStore()
+    @State private var mapData = MapDataStore()
     @State private var bookmarksStore = BookmarksStore()
     @State private var enactedLawsNotifier = EnactedLawsNotifier()
     @State private var location = LocationManager()
@@ -42,15 +43,26 @@ struct ContentView: View {
         case .loading, .ready:
             mainTabs
                 .task {
-                    // We launched straight into the app from a cached
-                    // delegation; quietly refresh it using the saved coordinate
-                    // so the data stays current without re-prompting.
-                    await store.refreshUsingCachedLocation()
-                }
-                .task {
-                    // Load the home feed of bills (uses cached results first,
-                    // then refreshes from the API).
+                    // Stage 1 — the visible screen. Load the home feed of bills
+                    // at normal priority (cached results first, then a refresh
+                    // from the API) so the tab the user is looking at wins the
+                    // main thread and the network.
                     await refreshBills()
+                }
+                .task(priority: .utility) {
+                    // Stages 2 & 3 — warm the other tabs in the background at a
+                    // lower priority so they fill in behind the home feed
+                    // without competing for the main thread. Their heavy work
+                    // (rep enrichment, boundary parsing, roster decoding) all
+                    // runs off-main, so this never stutters the feed.
+                    //
+                    // Reps and map load concurrently: `refreshUsingCachedLocation`
+                    // quietly refreshes the delegation from the saved coordinate
+                    // (no-op with no cached location), and `prefetch` warms the
+                    // map's boundaries and national rosters.
+                    async let reps: Void = store.refreshUsingCachedLocation()
+                    async let map: Void = mapData.prefetch()
+                    _ = await (reps, map)
                 }
         }
     }
@@ -81,7 +93,7 @@ struct ContentView: View {
 
             // Right tab: a map of the representatives' offices.
             Tab("Map", systemImage: "map", value: .map) {
-                DistrictMapView(representatives: store.representatives, userCoordinate: store.cachedCoordinate)
+                DistrictMapView(representatives: store.representatives, userCoordinate: store.cachedCoordinate, mapData: mapData)
             }
         }
         // Make the user's delegation available to bill detail screens so each

@@ -11,7 +11,7 @@
       - [x] Add sourced PAC/individual funder entries for CA, NY, and OH, etc
   - [x] Pull governors headshots from the national governors association
 
-- [ ] Build the interactive map view (evaluate performance and utility)
+- [x] Build the interactive map view (evaluate performance and utility)
   - [x] The map background should start with a solid background. It gains one, you just have to interact with the sheet first.
   - [x] Disable the border smoothing technique in the map for now. just comment it out so that we can maybe use it later, but the 0.005 smoothing is making some smaller districts look weird when next to other districts
   - [x] Photos no longer seem to be loading for the representatives. Is this just because we are attempting to load 435 representatives in the map? How can we prioritize loading our representatives first, and then our fellow state representatives on the map, then neighboring states, and then all of them? Instead of 435 in one go
@@ -33,11 +33,10 @@
       - [x] Show a list of all House representatives for the state in the state-level detail sheet, below the senators
       - [x] Add total population, top sectors/industries, top cities, and top universities sections to the state-level detail sheet (new state-keyed data directories, mirroring the district ones)
   - [x] We currently dont need to see the rest of the world in our map. Is there a way to just load a map of america? Would that be better for performance? We should just spend computational energy rendering America
-  - [x] Create a "toolbar" at the top of the map under the District maps title. this should have a "show icons" toggle as well as the recentering button on the right. the show icons toggle should toggle both district representative icons as well as governor icons
-  - [ ] Organize the map code into different files with clear purposes and outline a feature for adding state flags after being zoomed out, but dont implement it. Just add filler files for that task and keep hte current approach while cleaning up the files/organizing them. Keeping the project organized, modular, and maintainable is a priority.
+  - [x] Create a "toolbar" at the top of the map under the District maps title. this should have a "show icons" toggle as well as the recentering button on the right. the show icons toggle should toggle both district representative icons as well as governor icon
 
-- [ ] For the representatives view, start loading their information immediately if none is found on disk upon app load. The user shouldnt have to open the representatives tab for the loading to start or to kickstart the image loading.
-- [ ] Same with the map view. the map should be fully rendered upon app load, not when the map tab is opened for the first time. Upon app load load all recent bills & their details, then your representatives, then map data all at app launch before caching it for future runs.
+- [x] For the representatives view, start loading their information immediately if none is found on disk upon app load. The user shouldnt have to open the representatives tab for the loading to start or to kickstart the image loading.
+- [x] Same with the map view. the map should be fully rendered upon app load, not when the map tab is opened for the first time. Upon app load load all recent bills & their details, then your representatives, then map data all at app launch before caching it for future runs.
 - [x] In the voting history for an enacted law, I only see how my house of representatives representative voted. I want to see how my senators voted as well, but their votes dont show up (at least in the same section as my representatives vote shows up). I want to see my senators vote in the same spot
 
 - [x] Add home screen widgets that show what would be shown as the top bill in the recent bills feed
@@ -47,14 +46,13 @@
   - [x] Recently enacted laws should be a push notification
   - [x] Add the ability to bookmark a bill to recieve all notifications about it
   - [ ] Verify these actually work. Does politica every reload bills in the background? How will the app know when a bill has been updated? How frequently should we check? is there a certain time of day the library of congress updates their information
-
----
-
-## Version 1.0
-ONLY DO THIS WHEN EVERYTHING ABOVE IS IMPLEMENTED
-Get multiple API keys so the entire app isnt on my personal one
+- [ ] Add the SF symbol to the widget view.
+- [ ] Just make the progress sf symbol/text have the color like progress pill normally does, just without the pill outline in the widget, the widget background should be the sytem background (ie, no background if it defaults to system background)
+- [ ] Better onboarding screen
+- [ ] Get multiple API keys so the entire app isnt on my personal one
 - [ ] Gate the sample data behind the #ifDebug statement so that it doesnt bload the final release
 - [ ] Comment out the stock trades metric for now
+- [ ] Comment out the governor section and all code retrieving governor information in the "your representatives" section, leave to reimplement in version 1.1
 - [ ] Load "No representatives found" if there is some error retrieving the representatives and "Error collecting recent bill information" if there is an error loading bills. If there is an error finding representatives, offer the user to type in a zip code to load representatives with the text "On vacation? Type in your home zip code to find your representatives:"
 - [ ] Organize the project's functions and file structure for maximum maintainability and understanding
 - [ ] Modify ReadME
@@ -66,7 +64,10 @@ Get multiple API keys so the entire app isnt on my personal one
 ## Version 1.1 DO 
 DO NOT DO UNLESS EVERYTHING BEFORE 1.0 IS DONE
 
+- [ ] Organize the map code into different files with clear purposes and outline a feature for adding state flags after being zoomed out, but dont implement it. Just add filler files for that task and keep hte current approach while cleaning up the files/organizing them. Keeping the project organized, modular, and maintainable is a priority
+- [ ] Refactor the loading district detail section to just check if the variables we are loading have information in them yet. while they are nil, we should show the progress bar. When they are loaded but empty, skip displaying the section (ie, no universities in the district) or populated, show the data. Be sure to test
 - [ ] Re-add stock trades metric
+- [ ] Add accessibility labeling
 - [ ] If a district is a U around a dot, the representative could be misplaced within the dot instead of actually in their district
 - [ ] "Beats the market" quantitative metric — parse each PTR PDF into transactions (ticker, buy/sell, amount range, date) + pull historical prices to compute returns vs. a benchmark *(backend job: PDF parsing + a historical price data source; moved here from 0.3)*
 - [ ] Add information about if a senator beats the market. Pre calculate this and add this as a hard value in an update if there is no online source readily available

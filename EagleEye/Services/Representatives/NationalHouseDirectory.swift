@@ -20,9 +20,6 @@ final class NationalHouseDirectory {
 
     init(service: CongressService = CongressService()) {
         self.service = service
-        if let cached = Self.loadCache() {
-            members = cached
-        }
     }
 
     /// All current House members representing a given state, sorted by
@@ -39,6 +36,9 @@ final class NationalHouseDirectory {
     /// (e.g. no API key configured).
     func loadIfNeeded() async {
         guard members.isEmpty else { return }
+        // Surface the persisted roster first (decoded off the main thread) so
+        // the map has party colors immediately, then refresh from the API.
+        if let cached = await Self.loadCacheOffMain() { members = cached }
         guard let fetched = try? await service.allCurrentHouseMembers(), !fetched.isEmpty else { return }
         members = fetched
         Self.saveCache(fetched)
@@ -46,7 +46,7 @@ final class NationalHouseDirectory {
 
     // MARK: - Cache
 
-    private static let cacheKey = "cachedNationalHouseMembers"
+    nonisolated private static let cacheKey = "cachedNationalHouseMembers"
 
     /// Persists the roster on disk so it's available immediately (and offline)
     /// on the next launch, without waiting on a fresh fetch.
@@ -56,8 +56,14 @@ final class NationalHouseDirectory {
         }
     }
 
-    private static func loadCache() -> [Representative]? {
+    nonisolated private static func loadCache() -> [Representative]? {
         guard let data = UserDefaults.standard.data(forKey: cacheKey) else { return nil }
         return try? JSONDecoder().decode([Representative].self, from: data)
+    }
+
+    /// Decodes the cached roster on a background task so the ~435-member JSON
+    /// parse never blocks the main thread during launch prefetch.
+    private static func loadCacheOffMain() async -> [Representative]? {
+        await Task.detached(priority: .utility) { loadCache() }.value
     }
 }

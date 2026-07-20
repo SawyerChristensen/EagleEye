@@ -114,6 +114,7 @@ struct TopBillWidgetEntryView: View {
                     if let code = bill.displayCode {
                         Text(code)
                             .font(.caption2)
+                            //.monospaced()
                             .foregroundStyle(.white.opacity(0.7))
                     }
                 }
