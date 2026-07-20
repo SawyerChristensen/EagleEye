@@ -34,9 +34,10 @@ final class RepresentativesStore {
     }
 
     private(set) var representatives: [Representative] = []
-    /// The user's state governor, resolved from `GovernorDirectory` alongside
-    /// the congressional delegation. `nil` until a location has been resolved.
-    private(set) var governor: Governor?
+    // Governor disabled until v1.1.
+    // /// The user's state governor, resolved from `GovernorDirectory` alongside
+    // /// the congressional delegation. `nil` until a location has been resolved.
+    // private(set) var governor: Governor?
     private(set) var loadState: LoadState = .locating
     /// A user-facing note when live data could not be loaded (e.g. no API key).
     private(set) var statusMessage: String?
@@ -86,7 +87,8 @@ final class RepresentativesStore {
         if let cache = Self.loadCache(), !cache.representatives.isEmpty {
             representatives = cache.representatives
             cachedCoordinate = cache.coordinate
-            governor = cache.stateCode.flatMap(GovernorDirectory.governor(forState:))
+            // Governor disabled until v1.1.
+            // governor = cache.stateCode.flatMap(GovernorDirectory.governor(forState:))
             // Seed the on-demand profile cache from the persisted delegation so
             // opening one of these members from the map reuses it immediately,
             // even before the first background refresh.
@@ -136,7 +138,8 @@ final class RepresentativesStore {
                 // don't briefly strip the richer cached profiles back to basics.
                 if representatives.isEmpty {
                     representatives = delegation
-                    governor = GovernorDirectory.governor(forState: stateCode)
+                    // Governor disabled until v1.1.
+                    // governor = GovernorDirectory.governor(forState: stateCode)
                     loadState = .ready
                 }
 
@@ -150,7 +153,8 @@ final class RepresentativesStore {
                     marketService: marketService
                 )
                 representatives = enriched
-                governor = GovernorDirectory.governor(forState: stateCode)
+                // Governor disabled until v1.1.
+                // governor = GovernorDirectory.governor(forState: stateCode)
                 cachedCoordinate = coordinate
                 Self.saveCache(coordinate: coordinate, stateCode: stateCode, representatives: representatives)
                 // Share the freshly enriched delegation with the on-demand
@@ -162,8 +166,12 @@ final class RepresentativesStore {
                 // No key configured: keep any cached delegation on a silent
                 // refresh, otherwise show sample data.
                 if !silent {
+                    #if DEBUG
                     representatives = SampleData.representatives
                     statusMessage = "Showing sample data — add a Congress.gov API key to load live representatives."
+                    #else
+                    statusMessage = "Representatives are temporarily unavailable. Please try again later."
+                    #endif
                     loadState = .ready
                 }
             } catch {
@@ -171,9 +179,11 @@ final class RepresentativesStore {
                 // delegation exactly as it was.
                 if !silent {
                     statusMessage = error.localizedDescription
+                    #if DEBUG
                     if representatives.isEmpty {
                         representatives = SampleData.representatives
                     }
+                    #endif
                     loadState = .ready
                 }
             }

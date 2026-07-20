@@ -944,38 +944,22 @@ struct CongressService {
     }
 
     /// Resolves the API key from, in order: the `CONGRESS_GOV_API_KEY`
-    /// environment variable, the bundled (gitignored) `Secrets.plist`, or the
-    /// `CongressGovAPIKey` Info.plist entry. Falls back to the placeholder when
+    /// environment variable, then a key drawn from the pool bundled in the
+    /// (gitignored) `Secrets.plist` or the `CongressGovAPIKey` Info.plist entry.
+    /// `Secrets.plist` may hold either a single key or an array of keys; when it
+    /// holds several, each install is randomly assigned one (see `APIKeyPool`)
+    /// so no single key hits its rate limit. Falls back to the placeholder when
     /// none is set, which keeps the app on sample data.
     static var configuredAPIKey: String {
         if let env = ProcessInfo.processInfo.environment["CONGRESS_GOV_API_KEY"],
            !env.isEmpty {
             return env
         }
-        if let secret = secretsValue(forKey: "CongressGovAPIKey") {
-            return secret
-        }
-        if let plist = Bundle.main.object(forInfoDictionaryKey: "CongressGovAPIKey") as? String,
-           !plist.isEmpty {
-            return plist
+        let pool = APIKeyPool.keys(forKey: "CongressGovAPIKey", placeholder: apiKeyPlaceholder)
+        if let key = APIKeyPool.assignedKey(from: pool, persistenceKey: "apiKeyPool.congressGov") {
+            return key
         }
         return apiKeyPlaceholder
-    }
-
-    /// Reads a string from the bundled `Secrets.plist`, if present. Returns nil
-    /// when the file or key is missing or empty (e.g. on a fresh clone).
-    private static func secretsValue(forKey key: String) -> String? {
-        guard let url = Bundle.main.url(forResource: "Secrets", withExtension: "plist") else {
-            return nil
-        }
-        guard let data = try? Data(contentsOf: url),
-              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil),
-              let dict = plist as? [String: Any],
-              let value = dict[key] as? String,
-              !value.isEmpty else {
-            return nil
-        }
-        return value
     }
 }
 
@@ -1376,3 +1360,81 @@ private let billDateFormatter: DateFormatter = {
     formatter.dateFormat = "yyyy-MM-dd"
     return formatter
 }()
+
+// MARK: - API key pool
+
+/// Shared support for spreading API load across a pool of keys. Several of the
+/// app's data sources (Congress.gov, the Census Bureau) enforce per-key rate
+/// limits, so bundling more than one key and assigning each install a random
+/// one from the pool keeps any single key from hitting its ceiling.
+///
+/// A key is chosen once per install and remembered in UserDefaults, so a given
+/// device keeps using the same key across launches (which keeps that key's
+/// rate-limit window stable). New installs draw randomly from the full pool, so
+/// adding more keys to `Secrets.plist` automatically spreads future load — no
+/// code change required.
+///
+/// In `Secrets.plist` (and the Info.plist fallback), a service's value may be
+/// either a single `<string>` or an `<array>` of `<string>`s; both resolve to a
+/// pool. This keeps single-key setups working while allowing a pool.
+///
+/// This lives here (rather than its own file) because `CongressService.swift`
+/// is compiled into both the app and the widget extension targets, so the pool
+/// helper is available to both without duplicating target membership.
+enum APIKeyPool {
+    /// Reads the pool of keys for a service from the bundled `Secrets.plist`,
+    /// falling back to the Info.plist entry under the same key. Placeholder
+    /// values (equal to `placeholder`) and empties are filtered out, so a fresh
+    /// clone carrying the template resolves to an empty pool.
+    static func keys(forKey key: String, placeholder: String) -> [String] {
+        var candidates = secretsValue(forKey: key) ?? []
+        if candidates.isEmpty {
+            candidates = infoPlistValue(forKey: key)
+        }
+        return candidates.filter { !$0.isEmpty && $0 != placeholder }
+    }
+
+    /// Returns the key assigned to this install from `pool`, choosing one at
+    /// random the first time and persisting the choice under `persistenceKey`.
+    /// Re-picks if the remembered key is no longer in the pool (e.g. it was
+    /// rotated out). Returns `nil` when the pool is empty.
+    static func assignedKey(from pool: [String], persistenceKey: String) -> String? {
+        guard !pool.isEmpty else { return nil }
+        let defaults = UserDefaults.standard
+        if let stored = defaults.string(forKey: persistenceKey), pool.contains(stored) {
+            return stored
+        }
+        guard let chosen = pool.randomElement() else { return nil }
+        defaults.set(chosen, forKey: persistenceKey)
+        return chosen
+    }
+
+    /// Reads a string or array-of-strings value from the bundled `Secrets.plist`.
+    /// Returns `nil` when the file or key is missing (e.g. on a fresh clone).
+    private static func secretsValue(forKey key: String) -> [String]? {
+        guard let url = Bundle.main.url(forResource: "Secrets", withExtension: "plist"),
+              let data = try? Data(contentsOf: url),
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil),
+              let dict = plist as? [String: Any] else {
+            return nil
+        }
+        return stringList(from: dict[key])
+    }
+
+    /// Reads a string or array-of-strings value from the app's Info.plist.
+    private static func infoPlistValue(forKey key: String) -> [String] {
+        stringList(from: Bundle.main.object(forInfoDictionaryKey: key)) ?? []
+    }
+
+    /// Normalizes a plist value that may be a single string or an array of
+    /// strings into a flat list of strings.
+    private static func stringList(from value: Any?) -> [String]? {
+        if let string = value as? String {
+            return [string]
+        }
+        if let array = value as? [String] {
+            return array
+        }
+        return nil
+    }
+}

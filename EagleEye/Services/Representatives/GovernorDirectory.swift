@@ -1,3 +1,6 @@
+// NOTE: Governor feature disabled until v1.1. The entire file is commented
+// out below; re-enable by removing this note and the surrounding /* ... */.
+/*
 //
 //  GovernorDirectory.swift
 //  EagleEye
@@ -79,3 +82,4 @@ enum GovernorDirectory {
         all.first { $0.state.caseInsensitiveCompare(state) == .orderedSame }
     }
 }
+*/

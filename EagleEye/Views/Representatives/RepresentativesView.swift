@@ -9,8 +9,9 @@ import SwiftUI
 
 struct RepresentativesView: View {
     let representatives: [Representative]
-    /// The user's state governor, shown at the bottom of the delegation list.
-    var governor: Governor?
+    // Governor disabled until v1.1.
+    // /// The user's state governor, shown at the bottom of the delegation list.
+    // var governor: Governor?
     /// True while the delegation is being resolved and there's nothing to show
     /// yet, so the grid shows a spinner instead of a blank screen.
     var isLoading: Bool = false
@@ -37,9 +38,11 @@ struct RepresentativesView: View {
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) {
-                            if !orderedRepresentatives.isEmpty {
-                                SectionSubheader(title: "In Congress")
-                            }
+                            // Section subheaders disabled until v1.1, when the
+                            // governor section returns beneath the delegation.
+                            // if !orderedRepresentatives.isEmpty {
+                            //     SectionSubheader(title: "In Congress")
+                            // }
 
                             ForEach(orderedRepresentatives.indices, id: \.self) { index in
                                 NavigationLink(value: orderedRepresentatives[index]) {
@@ -52,15 +55,16 @@ struct RepresentativesView: View {
                                 }
                             }
 
-                            if let governor {
-                                SectionSubheader(title: "In \(governor.capitalCity)")
-                                    .padding(.top, 8)
-
-                                NavigationLink(value: governor) {
-                                    GovernorRow(governor: governor)
-                                }
-                                .buttonStyle(.plain)
-                            }
+                            // Governor section disabled until v1.1.
+                            // if let governor {
+                            //     SectionSubheader(title: "In \(governor.capitalCity)")
+                            //         .padding(.top, 8)
+                            //
+                            //     NavigationLink(value: governor) {
+                            //         GovernorRow(governor: governor)
+                            //     }
+                            //     .buttonStyle(.plain)
+                            // }
                         }
                         .padding(.horizontal, 20)
                         .padding(.vertical, 12)
@@ -71,9 +75,10 @@ struct RepresentativesView: View {
             .navigationDestination(for: Representative.self) { rep in
                 RepresentativeDetailView(representative: rep)
             }
-            .navigationDestination(for: Governor.self) { governor in
-                GovernorDetailView(governor: governor)
-            }
+            // Governor destination disabled until v1.1.
+            // .navigationDestination(for: Governor.self) { governor in
+            //     GovernorDetailView(governor: governor)
+            // }
             .navigationDestination(for: LegislationRef.self) { bill in
                 MemberBillDetailView(reference: bill)
             }
@@ -161,6 +166,8 @@ struct RepresentativeRow: View {
     }
 }
 
+// Governor row disabled until v1.1.
+/*
 /// A single tappable governor, styled the same as `RepresentativeRow` so the
 /// governor reads as part of the same list.
 struct GovernorRow: View {
@@ -189,6 +196,7 @@ struct GovernorRow: View {
         .contentShape(Rectangle())
     }
 }
+*/
 
 // MARK: - Previous two-per-row grid cell
 //
@@ -284,6 +292,8 @@ struct RepresentativePortrait: View {
     }
 }
 
+// Governor portrait disabled until v1.1.
+/*
 /// A governor's official NGA headshot, falling back to colored initials when
 /// no image is available. Mirrors `RepresentativePortrait`.
 struct GovernorPortrait: View {
@@ -344,6 +354,7 @@ struct GovernorPortrait: View {
         }
     }
 }
+*/
 
 #Preview {
     RepresentativesView(representatives: SampleData.representatives)

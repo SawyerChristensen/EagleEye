@@ -85,10 +85,11 @@ struct RepresentativeDetailView: View {
                     // "Beats the Market" is temporarily hidden — to be
                     // re-enabled in a later update. Its declaration and
                     // supporting types are kept below.
+                    
                     // marketMeterSection
-                    tradingSection
                     pacFundersSection
                     individualFundersSection
+                    tradingSection //this previously under market meter section
                 }
             }
             .padding()
@@ -387,9 +388,9 @@ struct RepresentativeDetailView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                    } else {
+                    } /*else {
                         EmptyNote("No stock-trade disclosures filed in the past year.")
-                    }
+                    }*/
 
                     if let url = activity.disclosureURL {
                         ContactRow(

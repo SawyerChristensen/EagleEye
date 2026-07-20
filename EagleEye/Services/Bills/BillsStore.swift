@@ -75,7 +75,11 @@ final class BillsStore {
                 // back to samples; otherwise keep the cache but say it wasn't
                 // refreshed.
                 if bills.isEmpty {
+                    #if DEBUG
                     bills = SampleData.bills.rankedByImportance()
+                    #else
+                    statusMessage = "Couldn't load bills just now — pull to refresh."
+                    #endif
                 } else {
                     statusMessage = "Couldn't load newer bills just now — showing saved bills."
                 }
@@ -86,17 +90,23 @@ final class BillsStore {
             }
             loadState = .ready
         } catch CongressService.ServiceError.missingAPIKey {
+            #if DEBUG
             if bills.isEmpty {
                 bills = SampleData.bills.rankedByImportance()
             }
             statusMessage = "Showing sample data — add a Congress.gov API key to load live bills."
+            #else
+            statusMessage = "Bills are temporarily unavailable. Please try again later."
+            #endif
             loadState = .ready
         } catch {
             // A failed refresh used to be swallowed whenever a cache was on
             // screen, leaving the feed silently frozen on stale bills. Surface
             // it even when we keep showing the cache so the staleness is visible.
             if bills.isEmpty {
+                #if DEBUG
                 bills = SampleData.bills.rankedByImportance()
+                #endif
                 statusMessage = error.localizedDescription
             } else {
                 statusMessage = "Couldn't refresh — showing saved bills. (\(error.localizedDescription))"

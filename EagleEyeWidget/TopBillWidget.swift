@@ -86,12 +86,20 @@ struct TopBillProvider: TimelineProvider {
             .deletingLastPathComponent() // PlugIns
             .deletingLastPathComponent() // <App>.app
         guard let data = try? Data(contentsOf: appBundleURL.appendingPathComponent("Secrets.plist")),
-              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-              let key = plist["CongressGovAPIKey"] as? String,
-              !key.isEmpty, key != CongressService.apiKeyPlaceholder else {
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
             return nil
         }
-        return key
+        // `CongressGovAPIKey` may be a single key or a pool (array) of keys; the
+        // widget draws one from the pool and remembers its choice, just like the
+        // app does (see `APIKeyPool`).
+        let pool: [String]
+        if let single = plist["CongressGovAPIKey"] as? String {
+            pool = [single]
+        } else {
+            pool = plist["CongressGovAPIKey"] as? [String] ?? []
+        }
+        let cleaned = pool.filter { !$0.isEmpty && $0 != CongressService.apiKeyPlaceholder }
+        return APIKeyPool.assignedKey(from: cleaned, persistenceKey: "apiKeyPool.congressGov")
     }
 }
 
@@ -102,34 +110,38 @@ struct TopBillWidgetEntryView: View {
     var body: some View {
         if let bill = entry.bill {
             VStack(alignment: .leading, spacing: 6) {
-                
-                HStack{ // The widget header
-                    Text(bill.status.displayLabel(chamber: bill.chamber).uppercased())
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.8))
-                        .lineLimit(1)
-                    
+
+                HStack(spacing: 6) { // The widget header
+                    Label {
+                        Text(bill.status.displayLabel(chamber: bill.chamber).uppercased())
+                    } icon: {
+                        Image(systemName: bill.status.symbolName(chamber: bill.chamber))
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(bill.status.widgetTint)
+                    .lineLimit(1)
+
                     Spacer()
-                    
+
                     if let code = bill.displayCode {
                         Text(code)
                             .font(.caption2)
                             //.monospaced()
-                            .foregroundStyle(.white.opacity(0.7))
+                            .foregroundStyle(.secondary)
                     }
                 }
-                
+
                 VStack(alignment: .leading, spacing: 6) {
                     // The widget title
                     Text(bill.displayName)
                         .font(.headline.weight(.semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.primary)
                         //.lineLimit(family == .systemSmall ? 3 : 4)
-                    
+
                     // The widget body text
                     Text(bill.summary)
                         .font(.footnote)
-                        .foregroundStyle(.white.opacity(0.85))
+                        .foregroundStyle(.secondary)
                         .lineLimit(family == .systemSmall ? 4 : 7)
                 }
                 .frame(maxHeight: .infinity, alignment: .topLeading)
@@ -147,7 +159,7 @@ struct TopBillWidgetEntryView: View {
             }
             .padding(.horizontal, 12)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .containerBackground(bill.status.widgetBackground, for: .widget)
+            .containerBackground(.background, for: .widget)
             .widgetURL(bill.widgetDeepLinkURL)
         } else {
             Text("No bill available")
@@ -158,17 +170,17 @@ struct TopBillWidgetEntryView: View {
     }
 }
 
-/// Solid background color per legislative stage: grey while it's still in
-/// committee, blue once it's cleared a chamber, green once it's law. The
-/// background is the only colored element — text stays white/grey — and the
-/// system substitutes its own background in tinted/clear Home Screen modes,
-/// so this only ever renders in standard full-color mode.
+/// The accent color per legislative stage, used to tint the progress header:
+/// grey while it's still in committee, blue once it's cleared a chamber, green
+/// once it's law. This mirrors the in-app feed's progress pill, and the system
+/// substitutes its own tint in tinted/clear Home Screen modes, so this only
+/// ever renders in standard full-color mode.
 private extension BillStatus {
-    var widgetBackground: Color {
+    var widgetTint: Color {
         switch tint {
         case "blue": .blue
         case "green": .green
-        default: .gray
+        default: .secondary
         }
     }
 }

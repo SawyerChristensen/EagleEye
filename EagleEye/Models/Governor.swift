@@ -1,3 +1,6 @@
+// NOTE: Governor feature disabled until v1.1. The entire file is commented
+// out below; re-enable by removing this note and the surrounding /* ... */.
+/*
 //
 //  Governor.swift
 //  EagleEye
@@ -38,3 +41,4 @@ struct Governor: Identifiable, Codable, Hashable {
     /// e.g. "Governor of California".
     var roleDescription: String { "Governor of \(stateName)" }
 }
+*/

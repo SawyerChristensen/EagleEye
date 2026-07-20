@@ -1,3 +1,6 @@
+// NOTE: Governor feature disabled until v1.1. The entire file is commented
+// out below; re-enable by removing this note and the surrounding /* ... */.
+/*
 //
 //  GovernorFunder.swift
 //  EagleEye
@@ -24,3 +27,4 @@ struct GovernorFunder: Identifiable, Codable, Hashable {
         self.funder = funder
     }
 }
+*/

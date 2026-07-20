@@ -1,3 +1,6 @@
+// NOTE: Governor feature disabled until v1.1. The entire file is commented
+// out below; re-enable by removing this note and the surrounding /* ... */.
+/*
 //
 //  GovernorDetailView.swift
 //  EagleEye
@@ -186,3 +189,4 @@ private struct StateLawRow: View {
         GovernorDetailView(governor: GovernorDirectory.all[0])
     }
 }
+*/

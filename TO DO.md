@@ -1,24 +1,20 @@
 # To Do
 ---
-- [ ] Add the SF symbol to the widget view.
-- [ ] Just make the progress sf symbol/text have the color like progress pill normally does, just without the pill outline in the widget, the widget background should be the sytem background (ie, no background if it defaults to system background)
-- [ ] Get multiple API keys so the entire app isnt on my personal one
-- [ ] Gate the sample data behind the #ifDebug statement so that it doesnt bloat the final release
-- [ ] Comment out the stock trades metric for now
-- [ ] Comment out the governor section and all code retrieving governor information in the "your representatives" section, leave to reimplement in version 1.1
-- [ ] Load "No representatives found" if there is some error retrieving the representatives and "Error collecting recent bill information" if there is an error loading bills. If there is an error finding representatives, offer the user to type in a zip code to load representatives with the text "On vacation? Type in your home zip code to find your representatives:"
-- [ ] Organize the project's functions and file structure for maximum maintainability and understanding
+- [ ] Test all API keys
+- [ ] AS listing via Photoshop
+
+## Post Launch
 - [ ] Modify ReadME
-#### Release!
-
-
----
-
-## Version 1.1
+- [ ] Organize the project's functions and file structure for maximum maintainability and understanding
 - [ ] Test if notifications works
+- [ ] Re-add governor information
+- [ ] Load "No representatives found" if there is some error retrieving the representatives and "Error collecting recent bill information" if there is an error loading bills. If there is an error finding representatives, offer the user to type in a zip code to load representatives with the text "On vacation? Type in your home zip code to find your representatives:"
 - [ ] Organize the map code into different files with clear purposes and outline a feature for adding state flags after being zoomed out, but dont implement it. Just add filler files for that task and keep hte current approach while cleaning up the files/organizing them. Keeping the project organized, modular, and maintainable is a priority
 - [ ] Refactor the loading district detail section to just check if the variables we are loading have information in them yet. while they are nil, we should show the progress bar. When they are loaded but empty, skip displaying the section (ie, no universities in the district) or populated, show the data. Be sure to test
+- [ ] Dark mode onboarding animation
+- [ ] Reuse the onboarding animation every app open to cover while the app loads new information?
 - [ ] Re-add stock trades metric
+  - [ ] OpenFEC API duplication? 
 - [ ] Add accessibility labeling
 - [ ] If a district is a U around a dot, the representative could be misplaced within the dot instead of actually in their district
 - [ ] "Beats the market" quantitative metric — parse each PTR PDF into transactions (ticker, buy/sell, amount range, date) + pull historical prices to compute returns vs. a benchmark *(backend job: PDF parsing + a historical price data source; moved here from 0.3)*

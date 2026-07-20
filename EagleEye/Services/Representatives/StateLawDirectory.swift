@@ -1,3 +1,6 @@
+// NOTE: Governor feature disabled until v1.1. The entire file is commented
+// out below; re-enable by removing this note and the surrounding /* ... */.
+/*
 //
 //  StateLawDirectory.swift
 //  EagleEye
@@ -89,3 +92,4 @@ enum StateLawDirectory {
         Calendar(identifier: .gregorian).date(from: DateComponents(year: year, month: month, day: day)) ?? .now
     }
 }
+*/

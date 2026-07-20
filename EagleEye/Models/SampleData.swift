@@ -8,6 +8,10 @@
 
 import Foundation
 
+// Placeholder data is compiled into DEBUG builds only, so it never bloats the
+// shipping app. Production code paths that used to fall back to this must be
+// guarded with `#if DEBUG` (see BillsStore / RepresentativesStore).
+#if DEBUG
 enum SampleData {
     /// A few representative bills for the home feed.
     static let bills: [Bill] = {
@@ -178,3 +182,4 @@ enum SampleData {
         ]
     }()
 }
+#endif

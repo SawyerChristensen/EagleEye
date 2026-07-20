@@ -1158,9 +1158,10 @@ private struct StateDetailSheet: View {
     let cityDirectory: StateCityDirectory
     let universityDirectory: StateUniversityDirectory
 
-    private var governor: Governor? {
-        GovernorDirectory.governor(forState: boundary.state)
-    }
+    // Governor disabled until v1.1.
+    // private var governor: Governor? {
+    //     GovernorDirectory.governor(forState: boundary.state)
+    // }
 
     private var population: Int? {
         populationDirectory.cachedPopulation(state: boundary.state)
@@ -1247,14 +1248,15 @@ private struct StateDetailSheet: View {
                         }
                     }
 
-                    if let governor {
-                        Divider()
-
-                        NavigationLink(value: governor) {
-                            GovernorRow(governor: governor)
-                        }
-                        .buttonStyle(.plain)
-                    }
+                    // Governor row disabled until v1.1.
+                    // if let governor {
+                    //     Divider()
+                    //
+                    //     NavigationLink(value: governor) {
+                    //         GovernorRow(governor: governor)
+                    //     }
+                    //     .buttonStyle(.plain)
+                    // }
 
                     if !senators.isEmpty {
                         Divider()
@@ -1297,9 +1299,10 @@ private struct StateDetailSheet: View {
                 .padding()
                 .padding(.top, 16)
             }
-            .navigationDestination(for: Governor.self) { governor in
-                GovernorDetailView(governor: governor)
-            }
+            // Governor destination disabled until v1.1.
+            // .navigationDestination(for: Governor.self) { governor in
+            //     GovernorDetailView(governor: governor)
+            // }
             .navigationDestination(for: Representative.self) { rep in
                 RepresentativeDetailView(representative: rep)
             }
