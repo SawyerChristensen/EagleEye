@@ -48,9 +48,24 @@ final class DistrictUniversityDirectory {
             universities = fetched
         }
 
-        let topUniversities = universities
+        let ranked = universities
             .filter { boundary.contains($0.coordinate) }
             .sorted { $0.enrollment > $1.enrollment }
+
+        // Keep only the leading run of comparably-sized campuses: walking down
+        // from the largest, drop the rest once one falls below 2/5 of the
+        // previous kept university's enrollment (and everything smaller after
+        // it). This surfaces the district's few notable universities rather
+        // than a long tail of tiny institutions.
+        var top: [DistrictUniversityService.University] = []
+        for university in ranked {
+            if let last = top.last, university.enrollment * 5 < last.enrollment * 2 {
+                break
+            }
+            top.append(university)
+        }
+
+        let topUniversities = top
             .prefix(limit)
             .map { "\($0.name) — \(Self.enrollmentFormatter.string(from: NSNumber(value: $0.enrollment)) ?? "\($0.enrollment)") students" }
 

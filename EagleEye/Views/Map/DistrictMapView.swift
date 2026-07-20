@@ -150,7 +150,7 @@ struct DistrictMapView: View {
                 )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(.background)
+                .presentationBackground(Color(.systemBackground))
             }
             .sheet(item: $selectedState) { boundary in
                 StateDetailSheet(

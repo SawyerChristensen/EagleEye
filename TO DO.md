@@ -12,16 +12,16 @@
   - [x] Pull governors headshots from the national governors association
 
 - [ ] Build the interactive map view (evaluate performance and utility)
-  - [ ] The map background should start with a solid background. It gains one, you just have to interact with the sheet first.
+  - [x] The map background should start with a solid background. It gains one, you just have to interact with the sheet first.
   - [x] Disable the border smoothing technique in the map for now. just comment it out so that we can maybe use it later, but the 0.005 smoothing is making some smaller districts look weird when next to other districts
   - [x] Photos no longer seem to be loading for the representatives. Is this just because we are attempting to load 435 representatives in the map? How can we prioritize loading our representatives first, and then our fellow state representatives on the map, then neighboring states, and then all of them? Instead of 435 in one go
-  - [ ] Add more information per district. Each district should display some basic information about the district, like the population count, top sectors/industry, top cities by population, top universties, and anything else relevant to the district. it should still show the representative. Feel free to split this into smaller tasks and add to-do list items under it. Right now the district detail section just shows the representative, but it should show more information. Is the informaiton below loaded in the backend? Wire it to the district detail sheet and display it if we have it in the backend.
+  - [x] Add more information per district. Each district should display some basic information about the district, like the population count, top sectors/industry, top cities by population, top universties, and anything else relevant to the district. it should still show the representative. Feel free to split this into smaller tasks and add to-do list items under it. Right now the district detail section just shows the representative, but it should show more information. Is the informaiton below loaded in the backend? Wire it to the district detail sheet and display it if we have it in the backend.
     - [x] In the district sheet, text should extend to the bottom of the district outline. the district outline should occupy a corner of the text instead of an column. this prevents text from extending into the area beneath it. the text should start where it does exactly, the the title and text start shouldnt move, but it should just take advantage of the space being claimed under the district outline
     - [x] Show each district's total population (Census ACS estimate) in the district detail sheet
     - [x] Show each district's top sectors/industries in the district detail sheet
     - [x] Show each district's top cities by population in the district detail sheet
     - [x] Show each district's top universities in the district detail sheet
-      - [ ] Starting from the top university, discard the next university if it is less than 2/5 of the last universities size by pop
+      - [x] Starting from the top university, discard the next university if it is less than 2/5 of the last universities size by pop
   - [x] Once a certain zoom level is reached, out to the state level, display the governors icons in the middle of the state. The state outline should be filled with the state flag instead of a single party color.
     - [x] Add a `StateFlagDirectory` (postal code -> Wikimedia Commons flag image URL, resolved via `Special:FilePath` so no per-state upload hash is needed) and a `StateFlagImage` view that loads/caches it, mirroring `GovernorPortrait`
     - [x] Detect the map's zoom level and, once zoomed out to state level, swap each state polygon's fill from its district party-color tint to its `StateFlagImage` and show the state's governor (via `GovernorPortrait`) annotated at the state's centroid instead of per-district representative pins
