@@ -701,9 +701,11 @@ struct MemberBillDetailView: View {
     }
 }
 
+#if DEBUG
 #Preview {
     NavigationStack {
         BillDetailView(bill: SampleData.bills[0])
     }
     .environment(BookmarksStore())
 }
+#endif

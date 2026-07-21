@@ -13,7 +13,7 @@
 		ADA87801532AE17FF7D6A692 /* EagleEye/Models/Bill.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCE025ADD4CD955F782E96B4 /* EagleEye/Models/Bill.swift */; };
 		BEF922482FEC3B3800C3EE25 /* TO DO.md in Resources */ = {isa = PBXBuildFile; fileRef = BEF922472FEC3B3800C3EE25 /* TO DO.md */; };
 		D37396D1CB292BD239CEB8CE /* TopBillWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 086B23FDA18FBE1D53B95AD8 /* TopBillWidget.swift */; };
-		D5E91942C1937F891E049668 /* EagleEyeWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 96636A2B7D60CEDA95AEBC7E /* EagleEyeWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeaderFile, ); }; };
+		D5E91942C1937F891E049668 /* PoliticaWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 96636A2B7D60CEDA95AEBC7E /* PoliticaWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeaderFile, ); }; };
 		E337A5590D5860F297E59422 /* EagleEye/Services/Representatives/CongressService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12D838790D522B322BAB1145 /* EagleEye/Services/Representatives/CongressService.swift */; };
 /* End PBXBuildFile section */
 
@@ -25,20 +25,6 @@
 			remoteGlobalIDString = 38AB67BAF692767BB2FC4954;
 			remoteInfo = EagleEyeWidgetExtension;
 		};
-		BEF59A662FEB30D9009C2382 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = BEF59A502FEB30D7009C2382 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = BEF59A572FEB30D7009C2382;
-			remoteInfo = EagleEye;
-		};
-		BEF59A702FEB30D9009C2382 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = BEF59A502FEB30D7009C2382 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = BEF59A572FEB30D7009C2382;
-			remoteInfo = EagleEye;
-		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -48,7 +34,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				D5E91942C1937F891E049668 /* EagleEyeWidgetExtension.appex in Embed Foundation Extensions */,
+				D5E91942C1937F891E049668 /* PoliticaWidgetExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -61,22 +47,20 @@
 		32A5F89DAFF48F5A381EE153 /* EagleEye/Services/Representatives/SenateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EagleEye/Services/Representatives/SenateService.swift; sourceTree = SOURCE_ROOT; };
 		4A1E0F26589124F137552525 /* EagleEyeWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EagleEyeWidgetBundle.swift; sourceTree = "<group>"; };
 		7B9A2E5BBC7EFE52F4AB0CD4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		96636A2B7D60CEDA95AEBC7E /* EagleEyeWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = EagleEyeWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		BEF59A582FEB30D7009C2382 /* EagleEye.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EagleEye.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		BEF59A652FEB30D9009C2382 /* EagleEyeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EagleEyeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		BEF59A6F2FEB30D9009C2382 /* EagleEyeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EagleEyeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		96636A2B7D60CEDA95AEBC7E /* PoliticaWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PoliticaWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		BEF59A582FEB30D7009C2382 /* Politica.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Politica.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BEF922472FEC3B3800C3EE25 /* TO DO.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "TO DO.md"; sourceTree = "<group>"; };
 		F7D0B29BC7BC65D443ECBD02 /* EagleEye/Models/Representative.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EagleEye/Models/Representative.swift; sourceTree = SOURCE_ROOT; };
 		FCE025ADD4CD955F782E96B4 /* EagleEye/Models/Bill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EagleEye/Models/Bill.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		E6EE0438A45F2BEE639E4333 /* Exceptions for "EagleEye" folder in "EagleEye" target */ = {
+		E6EE0438A45F2BEE639E4333 /* Exceptions for "EagleEye" folder in "Politica" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
-			target = BEF59A572FEB30D7009C2382 /* EagleEye */;
+			target = BEF59A572FEB30D7009C2382 /* Politica */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -84,7 +68,7 @@
 		BEF59A5A2FEB30D7009C2382 /* EagleEye */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				E6EE0438A45F2BEE639E4333 /* Exceptions for "EagleEye" folder in "EagleEye" target */,
+				E6EE0438A45F2BEE639E4333 /* Exceptions for "EagleEye" folder in "Politica" target */,
 			);
 			path = EagleEye;
 			sourceTree = "<group>";
@@ -110,20 +94,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		BEF59A552FEB30D7009C2382 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		BEF59A622FEB30D9009C2382 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		BEF59A6C2FEB30D9009C2382 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -170,10 +140,8 @@
 		BEF59A592FEB30D7009C2382 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				BEF59A582FEB30D7009C2382 /* EagleEye.app */,
-				BEF59A652FEB30D9009C2382 /* EagleEyeTests.xctest */,
-				BEF59A6F2FEB30D9009C2382 /* EagleEyeUITests.xctest */,
-				96636A2B7D60CEDA95AEBC7E /* EagleEyeWidgetExtension.appex */,
+				BEF59A582FEB30D7009C2382 /* Politica.app */,
+				96636A2B7D60CEDA95AEBC7E /* PoliticaWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -181,9 +149,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		38AB67BAF692767BB2FC4954 /* EagleEyeWidgetExtension */ = {
+		38AB67BAF692767BB2FC4954 /* PoliticaWidgetExtension */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 8D313644DCB81CA764BF21A0 /* Build configuration list for PBXNativeTarget "EagleEyeWidgetExtension" */;
+			buildConfigurationList = 8D313644DCB81CA764BF21A0 /* Build configuration list for PBXNativeTarget "PoliticaWidgetExtension" */;
 			buildPhases = (
 				A66A010AAEEB8851F01F65E3 /* Sources */,
 				85A12C2BA7718ADC81BD7E6B /* Frameworks */,
@@ -193,16 +161,16 @@
 			);
 			dependencies = (
 			);
-			name = EagleEyeWidgetExtension;
+			name = PoliticaWidgetExtension;
 			packageProductDependencies = (
 			);
 			productName = EagleEyeWidgetExtension;
-			productReference = 96636A2B7D60CEDA95AEBC7E /* EagleEyeWidgetExtension.appex */;
+			productReference = 96636A2B7D60CEDA95AEBC7E /* PoliticaWidgetExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
-		BEF59A572FEB30D7009C2382 /* EagleEye */ = {
+		BEF59A572FEB30D7009C2382 /* Politica */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = BEF59A792FEB30D9009C2382 /* Build configuration list for PBXNativeTarget "EagleEye" */;
+			buildConfigurationList = BEF59A792FEB30D9009C2382 /* Build configuration list for PBXNativeTarget "Politica" */;
 			buildPhases = (
 				BEF59A542FEB30D7009C2382 /* Sources */,
 				BEF59A552FEB30D7009C2382 /* Frameworks */,
@@ -217,58 +185,12 @@
 			fileSystemSynchronizedGroups = (
 				BEF59A5A2FEB30D7009C2382 /* EagleEye */,
 			);
-			name = EagleEye;
+			name = Politica;
 			packageProductDependencies = (
 			);
 			productName = EagleEye;
-			productReference = BEF59A582FEB30D7009C2382 /* EagleEye.app */;
+			productReference = BEF59A582FEB30D7009C2382 /* Politica.app */;
 			productType = "com.apple.product-type.application";
-		};
-		BEF59A642FEB30D9009C2382 /* EagleEyeTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = BEF59A7C2FEB30D9009C2382 /* Build configuration list for PBXNativeTarget "EagleEyeTests" */;
-			buildPhases = (
-				BEF59A612FEB30D9009C2382 /* Sources */,
-				BEF59A622FEB30D9009C2382 /* Frameworks */,
-				BEF59A632FEB30D9009C2382 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				BEF59A672FEB30D9009C2382 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				BEF59A682FEB30D9009C2382 /* EagleEyeTests */,
-			);
-			name = EagleEyeTests;
-			packageProductDependencies = (
-			);
-			productName = EagleEyeTests;
-			productReference = BEF59A652FEB30D9009C2382 /* EagleEyeTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
-		BEF59A6E2FEB30D9009C2382 /* EagleEyeUITests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = BEF59A7F2FEB30D9009C2382 /* Build configuration list for PBXNativeTarget "EagleEyeUITests" */;
-			buildPhases = (
-				BEF59A6B2FEB30D9009C2382 /* Sources */,
-				BEF59A6C2FEB30D9009C2382 /* Frameworks */,
-				BEF59A6D2FEB30D9009C2382 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				BEF59A712FEB30D9009C2382 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				BEF59A722FEB30D9009C2382 /* EagleEyeUITests */,
-			);
-			name = EagleEyeUITests;
-			packageProductDependencies = (
-			);
-			productName = EagleEyeUITests;
-			productReference = BEF59A6F2FEB30D9009C2382 /* EagleEyeUITests.xctest */;
-			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
 
@@ -285,14 +207,6 @@
 					};
 					BEF59A572FEB30D7009C2382 = {
 						CreatedOnToolsVersion = 26.5;
-					};
-					BEF59A642FEB30D9009C2382 = {
-						CreatedOnToolsVersion = 26.5;
-						TestTargetID = BEF59A572FEB30D7009C2382;
-					};
-					BEF59A6E2FEB30D9009C2382 = {
-						CreatedOnToolsVersion = 26.5;
-						TestTargetID = BEF59A572FEB30D7009C2382;
 					};
 				};
 			};
@@ -311,10 +225,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				BEF59A572FEB30D7009C2382 /* EagleEye */,
-				BEF59A642FEB30D9009C2382 /* EagleEyeTests */,
-				BEF59A6E2FEB30D9009C2382 /* EagleEyeUITests */,
-				38AB67BAF692767BB2FC4954 /* EagleEyeWidgetExtension */,
+				BEF59A572FEB30D7009C2382 /* Politica */,
+				38AB67BAF692767BB2FC4954 /* PoliticaWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -332,20 +244,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				BEF922482FEC3B3800C3EE25 /* TO DO.md in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		BEF59A632FEB30D9009C2382 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		BEF59A6D2FEB30D9009C2382 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -372,37 +270,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		BEF59A612FEB30D9009C2382 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		BEF59A6B2FEB30D9009C2382 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
 		643E94124144AE3A27CDCC1C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 38AB67BAF692767BB2FC4954 /* EagleEyeWidgetExtension */;
+			target = 38AB67BAF692767BB2FC4954 /* PoliticaWidgetExtension */;
 			targetProxy = 3202932F44CA21B437FA6C52 /* PBXContainerItemProxy */;
-		};
-		BEF59A672FEB30D9009C2382 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = BEF59A572FEB30D7009C2382 /* EagleEye */;
-			targetProxy = BEF59A662FEB30D9009C2382 /* PBXContainerItemProxy */;
-		};
-		BEF59A712FEB30D9009C2382 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = BEF59A572FEB30D7009C2382 /* EagleEye */;
-			targetProxy = BEF59A702FEB30D9009C2382 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -644,94 +518,10 @@
 			};
 			name = Release;
 		};
-		BEF59A7D2FEB30D9009C2382 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 4X76DT8A23;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = Sawyer.EagleEyeTests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/EagleEye.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/EagleEye";
-			};
-			name = Debug;
-		};
-		BEF59A7E2FEB30D9009C2382 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 4X76DT8A23;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = Sawyer.EagleEyeTests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/EagleEye.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/EagleEye";
-			};
-			name = Release;
-		};
-		BEF59A802FEB30D9009C2382 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 4X76DT8A23;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = Sawyer.EagleEyeUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = EagleEye;
-			};
-			name = Debug;
-		};
-		BEF59A812FEB30D9009C2382 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 4X76DT8A23;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = Sawyer.EagleEyeUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = EagleEye;
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		8D313644DCB81CA764BF21A0 /* Build configuration list for PBXNativeTarget "EagleEyeWidgetExtension" */ = {
+		8D313644DCB81CA764BF21A0 /* Build configuration list for PBXNativeTarget "PoliticaWidgetExtension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				71B1B371D1CBEFD42D6294E4 /* Debug */,
@@ -749,29 +539,11 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		BEF59A792FEB30D9009C2382 /* Build configuration list for PBXNativeTarget "EagleEye" */ = {
+		BEF59A792FEB30D9009C2382 /* Build configuration list for PBXNativeTarget "Politica" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				BEF59A7A2FEB30D9009C2382 /* Debug */,
 				BEF59A7B2FEB30D9009C2382 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		BEF59A7C2FEB30D9009C2382 /* Build configuration list for PBXNativeTarget "EagleEyeTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				BEF59A7D2FEB30D9009C2382 /* Debug */,
-				BEF59A7E2FEB30D9009C2382 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		BEF59A7F2FEB30D9009C2382 /* Build configuration list for PBXNativeTarget "EagleEyeUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				BEF59A802FEB30D9009C2382 /* Debug */,
-				BEF59A812FEB30D9009C2382 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

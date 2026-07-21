@@ -139,8 +139,9 @@ struct RepresentativeDetailView: View {
                 result = result.withCommittees(committees)
             }
             if let candidateIDs = await candidates[id], !candidateIDs.isEmpty {
-                async let pac = financeService.topFunders(candidateIDs: candidateIDs, office: result.office)
-                async let individual = financeService.topIndividualFunders(candidateIDs: candidateIDs, office: result.office)
+                let office = result.office
+                async let pac = financeService.topFunders(candidateIDs: candidateIDs, office: office)
+                async let individual = financeService.topIndividualFunders(candidateIDs: candidateIDs, office: office)
                 let pacFunders = await pac
                 let individualFunders = await individual
                 if !pacFunders.isEmpty || !individualFunders.isEmpty {
@@ -867,8 +868,10 @@ private struct FunderRow: View {
     }
 }
 
+#if DEBUG
 #Preview {
     NavigationStack {
         RepresentativeDetailView(representative: SampleData.representatives[0])
     }
 }
+#endif

@@ -13,7 +13,7 @@
         },
         "es" : {
           "stringUnit" : {
-            "state" : "needs_review",
+            "state" : "translated",
             "value" : "Política"
           }
         }
@@ -21,12 +21,17 @@
     },
     "CFBundleName" : {
       "comment" : "Bundle name",
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "EagleEye"
+            "state" : "translated",
+            "value" : "Politica"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Política"
           }
         }
       }
@@ -39,6 +44,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Politica uses your location to find your state senators and your district's House representative."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Política usa tu ubicación para encontrar a tus dos senadores y al representante de tu distrito en la Cámara."
           }
         }
       }

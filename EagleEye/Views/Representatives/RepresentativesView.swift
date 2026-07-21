@@ -356,6 +356,8 @@ struct GovernorPortrait: View {
 }
 */
 
+#if DEBUG
 #Preview {
     RepresentativesView(representatives: SampleData.representatives)
 }
+#endif

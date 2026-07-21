@@ -16,8 +16,8 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "BEF59A572FEB30D7009C2382"
-               BuildableName = "EagleEye.app"
-               BlueprintName = "EagleEye"
+               BuildableName = "Politica.app"
+               BlueprintName = "Politica"
                ReferencedContainer = "container:EagleEye.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -70,8 +70,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "BEF59A572FEB30D7009C2382"
-            BuildableName = "EagleEye.app"
-            BlueprintName = "EagleEye"
+            BuildableName = "Politica.app"
+            BlueprintName = "Politica"
             ReferencedContainer = "container:EagleEye.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -93,8 +93,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "BEF59A572FEB30D7009C2382"
-            BuildableName = "EagleEye.app"
-            BlueprintName = "EagleEye"
+            BuildableName = "Politica.app"
+            BlueprintName = "Politica"
             ReferencedContainer = "container:EagleEye.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

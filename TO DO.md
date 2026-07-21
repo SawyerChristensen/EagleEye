@@ -1,8 +1,5 @@
 # To Do
 ---
-- [ ] Test all API keys
-- [ ] AS listing via Photoshop
-
 ## Post Launch
 - [ ] Modify ReadME
 - [ ] Organize the project's functions and file structure for maximum maintainability and understanding

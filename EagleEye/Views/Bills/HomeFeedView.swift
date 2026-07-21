@@ -269,6 +269,8 @@ struct StatusBadge: View {
     }
 }
 
+#if DEBUG
 #Preview {
     HomeFeedView(bills: SampleData.bills)
 }
+#endif

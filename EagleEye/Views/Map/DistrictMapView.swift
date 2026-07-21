@@ -1494,6 +1494,8 @@ private struct DistrictOutlineShape: Shape {
     }
 }
 
+#if DEBUG
 #Preview {
     DistrictMapView(representatives: SampleData.representatives, userCoordinate: nil, mapData: MapDataStore())
 }
+#endif
