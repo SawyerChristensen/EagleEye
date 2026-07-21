@@ -1,4 +1,6 @@
-**Politica** is an iOS app that brings transparency and accessibility to US politics. It helps users track Congress, monitor their local representatives, and follow the money behind political campaigns.
+<img align="right" width="128" height="128" alt="PoliticaAppIcon" src="https://github.com/user-attachments/assets/da45cd10-56a1-4a65-b4f6-281acd619029" style="background-color: transparent;" />
+
+**Politica** is an iOS app that brings transparency and accessibility to US politics. It helps users track Congress, monitor their local representatives, follow the money behind political campaigns, and explore an interactive map of every congressional district.
 
 ## Features
 
@@ -8,14 +10,16 @@
 * **New Law Notifications:** Local push notifications when a bill you're tracking (or any bill in the feed) is signed into law.
 * **Representative Profiles:** Three tabs per representative — About (committees, sponsored/cosponsored bills, office contact info, social media), Votes (full voting history), and Money.
 * **Campaign Finance & Trading Transparency:** Top PAC and individual funders (via OpenFEC), plus a trading-activity indicator built from House Periodic Transaction Reports and the Senate eFD portal.
-* **Offline Support:** Bills, bill details/roll-calls, and the full representative delegation (committees, contact info, funders, trading activity, voting history) are cached on-device for offline viewing.
+* **Interactive Congressional Map:** Explore every U.S. congressional district as colored outlines across the country. The map opens centered on your district, and tapping any district reveals who represents it alongside demographic data — population, primary industries, average income, and local universities. Zooming out fades district outlines into a state-level view.
+* **Home Screen Widget:** A widget that surfaces the top bill in Congress and deep-links straight into its detail screen when tapped.
+* **Offline Support:** Bills, bill details/roll-calls, the full representative delegation (committees, contact info, funders, trading activity, voting history), and map boundaries/demographics are cached on-device for offline viewing.
+* **Privacy First:** Location is resolved entirely on-device and never collected or transmitted — ZIP-code entry works without granting location access at all.
 * **Localization:** English and Spanish, including a localized app name.
-* **Interactive Congressional Map:** Planned — not yet implemented (see `TO DO.md`).
 
 ## Tech Stack
 
 * **Platform:** iOS 17+
-* **Framework:** SwiftUI
+* **Frameworks:** SwiftUI, MapKit, WidgetKit
 * **Language:** Swift
 * **Data Sources:**
   * [Congress.gov API](https://api.congress.gov/sign-up/) — bills, member data, House roll calls
@@ -23,6 +27,7 @@
   * [OpenFEC API](https://api.open.fec.gov/developers/) — campaign finance / top funders
   * House Clerk financial disclosure index (on-device ZIP/TSV parsing) and efdsearch.senate.gov — trading-activity disclosures
   * Apple's `CLGeocoder`/Census geocoding — representative lookup by location
+  * Bundled congressional-district boundaries plus Census-derived district demographics (population, primary industries, average income, universities) powering the interactive map
 
 ## Getting Started
 
